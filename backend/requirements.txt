@@ -1,0 +1,8 @@
+numpy
+pandas
+matplotlib
+scikit-learn
+rasterio
+h5py
+torch
+torchvision
