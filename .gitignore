@@ -1,0 +1,25 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+
+# Node
+node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+
+# Generated model files
+*.pth
+*.pt
+
+# Generated datasets
+dataset/raw/
+dataset/processed/
+
+# Generated results
+results/

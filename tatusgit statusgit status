@@ -1,0 +1,7 @@
+[33m8d6ee02[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m chore: add Week 1 Python dependencies
+[33mb649079[m feat: add PCA component visualization
+[33m610f568[m feat: add PCA dimensionality reduction
+[33m824e295[m feat: add Rasterio hyperspectral data reader
+[33md2ca91c[m[33m ([m[1;31morigin/main[m[33m)[m feat: convert hyperspectral cube to GeoTIFF
+[33m2a698b0[m feat: generate mock 224-band hyperspectral dataset
+[33md0f8f39[m first commit
