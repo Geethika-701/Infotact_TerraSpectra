@@ -1,92 +1,41 @@
-import { useState } from "react";
+import React, { useMemo } from "react";
 import Map from "react-map-gl/mapbox";
 import { DeckGL } from "@deck.gl/react";
-import { GeoJsonLayer } from "@deck.gl/layers";
+import Heatmap from "./Heatmap";
 
 import "mapbox-gl/dist/mapbox-gl.css";
 
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+
 const INITIAL_VIEW_STATE = {
-  longitude: 83.30,
-  latitude: 17.72,
-  zoom: 14,
+  longitude: 83.2185,
+  latitude: 17.6868,
+  zoom: 15,
   pitch: 45,
-  bearing: 0
+  bearing: 0,
 };
 
-// Mock farm boundary
-const FARM_BOUNDARY = {
-  type: "FeatureCollection",
-  features: [
-    {
-      type: "Feature",
-      properties: {
-        name: "TerraSpectra Farm"
-      },
-      geometry: {
-        type: "Polygon",
-        coordinates: [[
-          [83.2980, 17.7180],
-          [83.3020, 17.7180],
-          [83.3020, 17.7220],
-          [83.2980, 17.7220],
-          [83.2980, 17.7180]
-        ]]
-      }
+export default function FarmMap({ predictions }) {
+  const layers = useMemo(() => {
+    if (!predictions || predictions.length === 0) {
+      return [];
     }
-  ]
-};
 
-function FarmMap() {
-
-  const [viewState, setViewState] = useState(
-    INITIAL_VIEW_STATE
-  );
-
-  const layers = [
-    new GeoJsonLayer({
-      id: "farm-boundary",
-      data: FARM_BOUNDARY,
-
-      filled: true,
-
-      getFillColor: [0, 128, 0, 80],
-
-      getLineColor: [0, 80, 0, 255],
-
-      getLineWidth: 4,
-
-      lineWidthMinPixels: 2,
-
-      pickable: true,
-
-      onClick: ({ object }) => {
-        if (object) {
-          alert(
-            object.properties.name
-          );
-        }
-      }
-    })
-  ];
+    return [Heatmap({ predictions })];
+  }, [predictions]);
 
   return (
-    <DeckGL
-      viewState={viewState}
-      onViewStateChange={({ viewState }) =>
-        setViewState(viewState)
-      }
-      controller={true}
-      layers={layers}
-    >
-      <Map
-        mapboxAccessToken={
-          import.meta.env.VITE_MAPBOX_TOKEN
-        }
-
-        mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
-      />
-    </DeckGL>
+    <div className="farm-map-container">
+      <DeckGL
+        initialViewState={INITIAL_VIEW_STATE}
+        controller={true}
+        layers={layers}
+      >
+        <Map
+          mapboxAccessToken={MAPBOX_TOKEN}
+          mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
+        />
+      </DeckGL>
+    </div>
   );
 }
-
-export default FarmMap;
