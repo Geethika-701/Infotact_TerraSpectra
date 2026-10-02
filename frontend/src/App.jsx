@@ -1,183 +1,341 @@
-
 import React, { useEffect, useState } from "react";
-import Map from "react-map-gl/mapbox";
-import DeckGL from "@deck.gl/react";
-import { ScatterplotLayer } from "@deck.gl/layers";
 
-import "mapbox-gl/dist/mapbox-gl.css";
-
-// Map starting location
-const INITIAL_VIEW_STATE = {
-  longitude: 83.2185,
-  latitude: 17.6868,
-  zoom: 14,
-  pitch: 0,
-  bearing: 0,
-};
+import FarmMap from "./components/FarmMap";
 
 function App() {
-  const [pcaData, setPcaData] = useState(null);
+  const [predictions, setPredictions] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Load PCA data
   useEffect(() => {
-    fetch("/pca_map.json")
+    fetch("/predictions.json")
       .then((response) => {
         if (!response.ok) {
-          throw new Error("Failed to load PCA map data");
+          throw new Error("Failed to load predictions.json");
         }
 
         return response.json();
       })
       .then((data) => {
-        setPcaData(data);
+        const rawPredictions = data.predictions || [];
+
+        // Normalize prediction field names
+        // Supports either:
+        // status + probability
+        // OR
+        // class + confidence
+        const normalizedPredictions = rawPredictions.map((item) => ({
+          ...item,
+
+          status:
+            item.status ||
+            item.class ||
+            "healthy",
+
+          probability:
+            item.probability ??
+            item.confidence ??
+            0.8,
+        }));
+
+        setPredictions(normalizedPredictions);
+        setLoading(false);
       })
       .catch((err) => {
-        console.error("PCA data error:", err);
+        console.error("Prediction data error:", err);
+
         setError(err.message);
+        setLoading(false);
       });
   }, []);
 
-  // PCA points
-  const points = pcaData ? pcaData.points : [];
+  const healthyCount = predictions.filter(
+    (item) => item.status === "healthy"
+  ).length;
 
-  // Deck.gl layer
-  const layers = [
-    new ScatterplotLayer({
-      id: "pca-points",
-
-      data: points,
-
-      getPosition: (point) => [
-        point.longitude,
-        point.latitude,
-      ],
-
-      getRadius: 4,
-
-      radiusMinPixels: 2,
-      radiusMaxPixels: 8,
-
-      // PCA value converted to color
-      getFillColor: (point) => {
-        const value = point.value;
-
-        return [
-          Math.round(255 * value),
-          Math.round(255 * (1 - value)),
-          0,
-        ];
-      },
-
-      pickable: true,
-
-      getTooltip: (info) => {
-        if (!info.object) {
-          return null;
-        }
-
-        return {
-          text: `PCA Value: ${info.object.value.toFixed(4)}`,
-        };
-      },
-    }),
-  ];
+  const stressedCount = predictions.filter(
+    (item) => item.status === "chemically_stressed"
+  ).length;
 
   return (
-    <div
-      style={{
-        width: "100vw",
-        height: "100vh",
-        position: "relative",
-      }}
-    >
-      {/* Mapbox + Deck.gl */}
-      <DeckGL
-        initialViewState={INITIAL_VIEW_STATE}
-        controller={true}
-        layers={layers}
-      >
-        <Map
-          mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
-          mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
-        />
-      </DeckGL>
+    <div className="app">
 
-      {/* Information Panel */}
-      <div
-        style={{
-          position: "absolute",
-          top: "20px",
-          left: "20px",
-          background: "white",
-          padding: "15px 20px",
-          borderRadius: "8px",
-          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.3)",
-          minWidth: "240px",
-          zIndex: 10,
-        }}
-      >
-        <h2
-          style={{
-            margin: "0 0 5px 0",
-          }}
-        >
-          TerraSpectra
-        </h2>
+      {/* HEADER */}
 
-        <p
-          style={{
-            margin: "0 0 10px 0",
-          }}
-        >
-          Hyperspectral Crop Disease Forecasting
-        </p>
+      <header className="header">
 
-        <p
-          style={{
-            margin: "0 0 5px 0",
-            fontWeight: "bold",
-          }}
-        >
-          PCA Hyperspectral Visualization
-        </p>
+        <div>
+          <h1>TerraSpectra</h1>
 
-        {pcaData && (
-          <>
-            <p style={{ margin: "5px 0" }}>
-              Pixels: {pcaData.points.length}
-            </p>
-
-            <p style={{ margin: "5px 0" }}>
-              Components: {pcaData.components}
-            </p>
-
-            <p style={{ margin: "5px 0" }}>
-              Component Used: PCA {pcaData.component_used}
-            </p>
-          </>
-        )}
-
-        {!pcaData && !error && (
-          <p style={{ margin: "8px 0 0 0" }}>
-            Loading PCA data...
+          <p>
+            Hyperspectral Crop Disease Forecasting
           </p>
-        )}
+        </div>
+
+        <div className="week-badge">
+          Week 2 — 3D-CNN Classification
+        </div>
+
+      </header>
+
+
+      {/* MAIN CONTENT */}
+
+      <main className="main-content">
+
+        {/* PROJECT INFORMATION */}
+
+        <section className="project-info">
+
+          <div>
+            <h2>
+              Healthy vs Chemically Stressed
+              Pixel Classification
+            </h2>
+
+            <p>
+              Hybrid 3D-CNN prediction results
+              visualized on the farm map
+            </p>
+          </div>
+
+          <div className="status">
+
+            <span className="status-dot"></span>
+
+            {loading
+              ? "Loading predictions..."
+              : error
+              ? "Prediction data error"
+              : "Prediction data loaded"}
+
+          </div>
+
+        </section>
+
+
+        {/* ERROR */}
 
         {error && (
-          <p
+          <div
             style={{
-              margin: "8px 0 0 0",
-              color: "red",
+              padding: "15px",
+              marginBottom: "20px",
+              background: "#fee2e2",
+              color: "#991b1b",
+              borderRadius: "8px",
+              border: "1px solid #fecaca",
             }}
           >
             Error: {error}
-          </p>
+          </div>
         )}
-      </div>
+
+
+        {/* STATISTICS */}
+
+        {!loading && !error && (
+          <section className="stats">
+
+            <div className="stat-card">
+
+              <span className="stat-label">
+                Total Classified Pixels
+              </span>
+
+              <strong>
+                {predictions.length}
+              </strong>
+
+            </div>
+
+
+            <div className="stat-card healthy">
+
+              <span className="stat-label">
+                Healthy Pixels
+              </span>
+
+              <strong>
+                {healthyCount}
+              </strong>
+
+            </div>
+
+
+            <div className="stat-card stressed">
+
+              <span className="stat-label">
+                Chemically Stressed Pixels
+              </span>
+
+              <strong>
+                {stressedCount}
+              </strong>
+
+            </div>
+
+          </section>
+        )}
+
+
+        {/* MAP */}
+
+        <section className="map-section">
+
+          <div className="map-header">
+
+            <div>
+
+              <h2>
+                Hyperspectral Classification Map
+              </h2>
+
+              <p>
+                Hybrid 3D-CNN pixel classification
+                overlay
+              </p>
+
+            </div>
+
+
+            <div className="legend">
+
+              <div className="legend-item">
+
+                <span className="legend-color healthy-color"></span>
+
+                Healthy
+
+              </div>
+
+
+              <div className="legend-item">
+
+                <span className="legend-color stressed-color"></span>
+
+                Chemically Stressed
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <div className="map-wrapper">
+
+            {loading ? (
+              <div className="loading">
+
+                <div className="spinner"></div>
+
+                <p>
+                  Loading classification results...
+                </p>
+
+              </div>
+            ) : error ? (
+              <div className="loading">
+
+                <p>
+                  Unable to load prediction data.
+                </p>
+
+              </div>
+            ) : (
+              <FarmMap
+                predictions={predictions}
+              />
+            )}
+
+          </div>
+
+        </section>
+
+
+        {/* MODEL INFORMATION */}
+
+        <section className="model-info">
+
+          <div className="info-card">
+
+            <h3>
+              Week 2 Model
+            </h3>
+
+            <p>
+              Hybrid 3D-CNN implemented using
+              PyTorch for hyperspectral pixel
+              classification into healthy and
+              chemically stressed categories.
+            </p>
+
+          </div>
+
+
+          <div className="info-card">
+
+            <h3>
+              Processing Pipeline
+            </h3>
+
+            <div className="pipeline">
+
+              <span>
+                Hyperspectral Data
+              </span>
+
+              <span className="arrow">
+                →
+              </span>
+
+              <span>
+                PCA
+              </span>
+
+              <span className="arrow">
+                →
+              </span>
+
+              <span>
+                Hybrid 3D-CNN
+              </span>
+
+              <span className="arrow">
+                →
+              </span>
+
+              <span>
+                Predictions
+              </span>
+
+              <span className="arrow">
+                →
+              </span>
+
+              <span>
+                Map
+              </span>
+
+            </div>
+
+          </div>
+
+        </section>
+
+      </main>
+
+
+      {/* FOOTER */}
+
+      <footer>
+        TerraSpectra — Hyperspectral Crop Disease
+        Forecasting
+      </footer>
+
     </div>
   );
 }
 
 export default App;
-
