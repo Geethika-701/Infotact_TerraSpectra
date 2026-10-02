@@ -4,64 +4,93 @@ import torch.nn as nn
 
 class Hybrid3DCNN(nn.Module):
     """
-    Hybrid 3D-CNN for hyperspectral pixel classification.
+    Hybrid hyperspectral classifier.
 
-    Input:
-        [batch, 1, spectral_bands, height, width]
+    Branch 1:
+        3D CNN processes the original 224-band
+        hyperspectral pixel patch.
 
-    Example:
-        [64, 1, 224, 5, 5]
+    Branch 2:
+        2D CNN processes the PCA-reduced
+        10-component representation.
 
-    Output:
-        [batch, 2]
-
-    Classes:
-        0 = Healthy
-        1 = Chemically Stressed
+    The two feature representations are fused
+    for healthy vs chemically stressed classification.
     """
 
     def __init__(self, num_classes=2):
         super().__init__()
 
-        # ---------------------------------------------------------
-        # 3D CNN
-        # Learns spectral-spatial features from hyperspectral data
-        # ---------------------------------------------------------
-        self.spectral_spatial_features = nn.Sequential(
+        # -------------------------------------------------
+        # 3D CNN BRANCH
+        # Input:
+        # [batch, 1, 5, 5, 224]
+        # -------------------------------------------------
+
+        self.spectral_branch = nn.Sequential(
 
             nn.Conv3d(
                 in_channels=1,
                 out_channels=8,
-                kernel_size=(7, 3, 3),
-                padding=(3, 1, 1)
+                kernel_size=(3, 3, 7),
+                padding=(1, 1, 3)
             ),
 
             nn.BatchNorm3d(8),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
 
             nn.MaxPool3d(
-                kernel_size=(2, 1, 1)
+                kernel_size=(2, 2, 4)
             ),
 
             nn.Conv3d(
                 in_channels=8,
                 out_channels=16,
-                kernel_size=(5, 3, 3),
-                padding=(2, 1, 1)
+                kernel_size=(3, 3, 5),
+                padding=(1, 1, 2)
             ),
 
             nn.BatchNorm3d(16),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
 
-            # Reduce the spectral dimension to 1
-            nn.AdaptiveAvgPool3d((1, 5, 5))
+            nn.MaxPool3d(
+                kernel_size=(2, 2, 4)
+            ),
+
+            nn.Conv3d(
+                in_channels=16,
+                out_channels=32,
+                kernel_size=(3, 3, 3),
+                padding=1
+            ),
+
+            nn.BatchNorm3d(32),
+            nn.ReLU(),
+
+            nn.AdaptiveAvgPool3d(
+                (1, 1, 1)
+            )
         )
 
-        # ---------------------------------------------------------
-        # 2D CNN
-        # Learns spatial information after spectral extraction
-        # ---------------------------------------------------------
-        self.spatial_features = nn.Sequential(
+        # -------------------------------------------------
+        # PCA 2D BRANCH
+        # Input:
+        # [batch, 10, 5, 5]
+        # -------------------------------------------------
+
+        self.pca_branch = nn.Sequential(
+
+            nn.Conv2d(
+                in_channels=10,
+                out_channels=16,
+                kernel_size=3,
+                padding=1
+            ),
+
+            nn.BatchNorm2d(16),
+            nn.ReLU(),
+
+            nn.MaxPool2d(2),
 
             nn.Conv2d(
                 in_channels=16,
@@ -71,83 +100,104 @@ class Hybrid3DCNN(nn.Module):
             ),
 
             nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
 
-            nn.Conv2d(
-                in_channels=32,
-                out_channels=32,
-                kernel_size=3,
-                padding=1
-            ),
-
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-
-            nn.AdaptiveAvgPool2d((1, 1))
+            nn.AdaptiveAvgPool2d(
+                (1, 1)
+            )
         )
 
-        # ---------------------------------------------------------
-        # Classification layer
-        # ---------------------------------------------------------
+        # -------------------------------------------------
+        # FUSION CLASSIFIER
+        # 3D branch = 32
+        # PCA branch = 32
+        # Total = 64
+        # -------------------------------------------------
+
         self.classifier = nn.Sequential(
 
-            nn.Flatten(),
+            nn.Linear(64, 32),
 
-            nn.Linear(32, 16),
+            nn.ReLU(),
 
-            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
 
-            nn.Dropout(0.3),
-
-            nn.Linear(16, num_classes)
+            nn.Linear(
+                32,
+                num_classes
+            )
         )
 
-    def forward(self, x):
+    def forward(
+        self,
+        hyperspectral,
+        pca
+    ):
 
-        # Input:
-        # [batch, 1, bands, height, width]
+        # 3D CNN features
+        spectral_features = self.spectral_branch(
+            hyperspectral
+        )
 
-        x = self.spectral_spatial_features(x)
+        spectral_features = spectral_features.view(
+            spectral_features.size(0),
+            -1
+        )
 
-        # After AdaptiveAvgPool3d:
-        # [batch, 16, 1, 5, 5]
+        # PCA features
+        pca_features = self.pca_branch(
+            pca
+        )
 
-        # Remove spectral depth dimension
-        x = x.squeeze(2)
+        pca_features = pca_features.view(
+            pca_features.size(0),
+            -1
+        )
 
-        # Now:
-        # [batch, 16, 5, 5]
+        # Hybrid feature fusion
+        combined = torch.cat(
+            [
+                spectral_features,
+                pca_features
+            ],
+            dim=1
+        )
 
-        x = self.spatial_features(x)
+        output = self.classifier(
+            combined
+        )
 
-        # Now:
-        # [batch, 32, 1, 1]
-
-        x = self.classifier(x)
-
-        # Final:
-        # [batch, 2]
-
-        return x
+        return output
 
 
 if __name__ == "__main__":
 
-    # Simple architecture test
     model = Hybrid3DCNN()
 
-    dummy_input = torch.randn(
+    print(model)
+
+    # Test tensor
+    hyperspectral = torch.randn(
         2,
         1,
-        224,
+        5,
+        5,
+        224
+    )
+
+    pca = torch.randn(
+        2,
+        10,
         5,
         5
     )
 
-    output = model(dummy_input)
+    output = model(
+        hyperspectral,
+        pca
+    )
 
-    print("Hybrid 3D-CNN test successful")
-    print("Input shape :", dummy_input.shape)
-    print("Output shape:", output.shape)
-    print("Model:")
-    print(model)
+    print(
+        "\nTest output shape:",
+        output.shape
+    )
