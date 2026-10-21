@@ -1,0 +1,11 @@
+{
+  "total_classified_pixels": 3600,
+  "healthy_pixels": 2996,
+  "stressed_pixels": 604,
+  "stressed_percentage": 16.78,
+  "estimated_acres_at_risk": null,
+  "acreage_note": "Unavailable: real ground area per pixel is not configured.",
+  "chemical_anomalies": [],
+  "chemical_anomaly_note": "Chemical-specific identities cannot be determined from the current synthetic healthy/stressed labels.",
+  "data_source": "Mock hyperspectral predictions"
+}
