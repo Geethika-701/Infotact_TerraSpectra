@@ -2,90 +2,154 @@ import os
 import numpy as np
 from sklearn.decomposition import PCA
 
-INPUT_PATH = "dataset/processed/normalized_hyperspectral.npy"
-OUTPUT_PATH = "dataset/processed/pca_hyperspectral.npy"
-
-N_COMPONENTS = 10
+from read_hyperspectral import read_hyperspectral
+from preprocessing import normalize_cube
 
 
-def perform_pca():
+BASE_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
 
-    # Load normalized hyperspectral cube
-    cube = np.load(INPUT_PATH)
+INPUT_FILE = os.path.join(
+    BASE_DIR,
+    "dataset",
+    "raw",
+    "mock_hyperspectral.tif"
+)
+
+OUTPUT_DIR = os.path.join(
+    BASE_DIR,
+    "dataset",
+    "processed"
+)
+
+os.makedirs(
+    OUTPUT_DIR,
+    exist_ok=True
+)
+
+
+def perform_pca(
+    cube,
+    components=3
+):
+
+    # --------------------------------------------------------
+    # Normalize
+    # --------------------------------------------------------
+
+    cube = normalize_cube(cube)
 
     height, width, bands = cube.shape
 
-    print("Input Cube")
-    print("----------")
-    print("Height:", height)
-    print("Width :", width)
-    print("Bands :", bands)
-
-    # Convert pixels into rows
-    # Shape:
-    # (height * width, bands)
+    # --------------------------------------------------------
+    # Convert:
+    #
+    # Height × Width × Bands
+    #
+    # to:
+    #
+    # Pixels × Bands
+    # --------------------------------------------------------
 
     pixels = cube.reshape(
         height * width,
         bands
     )
 
-    print("\nPCA Input Shape:", pixels.shape)
+    print(
+        "Pixel matrix:",
+        pixels.shape
+    )
 
+    # --------------------------------------------------------
     # PCA
+    # --------------------------------------------------------
+
     pca = PCA(
-        n_components=N_COMPONENTS,
+        n_components=components,
         random_state=42
     )
 
-    reduced_pixels = pca.fit_transform(
+    transformed = pca.fit_transform(
         pixels
     )
 
-    # Restore spatial dimensions
-    reduced_cube = reduced_pixels.reshape(
-        height,
-        width,
-        N_COMPONENTS
+    print(
+        "PCA transformed:",
+        transformed.shape
     )
 
-    os.makedirs(
-        "dataset/processed",
-        exist_ok=True
-    )
-
-    np.save(
-        OUTPUT_PATH,
-        reduced_cube.astype(np.float32)
-    )
-
-    explained_variance = (
+    print(
+        "Explained variance:",
         pca.explained_variance_ratio_
     )
 
-    print("\nPCA completed!")
-    print("----------------")
-    print("Original Bands:", bands)
-    print("Reduced Components:", N_COMPONENTS)
-    print("Output Shape:", reduced_cube.shape)
-
-    print("\nExplained Variance:")
-    for index, value in enumerate(
-        explained_variance,
-        start=1
-    ):
-        print(
-            f"Component {index}: "
-            f"{value:.4f}"
-        )
-
     print(
-        "\nTotal Explained Variance:",
-        f"{explained_variance.sum():.4f}"
+        "Total explained variance:",
+        np.sum(
+            pca.explained_variance_ratio_
+        )
     )
 
-    print("Saved:", OUTPUT_PATH)
+    # --------------------------------------------------------
+    # Convert back:
+    #
+    # Pixels × Components
+    #
+    # to:
+    #
+    # Height × Width × Components
+    # --------------------------------------------------------
+
+    pca_cube = transformed.reshape(
+        height,
+        width,
+        components
+    )
+
+    return pca_cube, pca
 
 
 if __name__ == "__main__":
-    perform_pca()
+
+    cube, profile, transform, crs, bounds = \
+        read_hyperspectral(
+            INPUT_FILE
+        )
+
+    pca_cube, pca = perform_pca(
+        cube,
+        components=3
+    )
+
+    output_file = os.path.join(
+        OUTPUT_DIR,
+        "pca_cube.npy"
+    )
+
+    np.save(
+        output_file,
+        pca_cube
+    )
+
+    print("=" * 60)
+    print("PCA completed")
+    print("=" * 60)
+
+    print(
+        "Original shape:",
+        cube.shape
+    )
+
+    print(
+        "PCA shape:",
+        pca_cube.shape
+    )
+
+    print(
+        "Saved:",
+        output_file
+    )

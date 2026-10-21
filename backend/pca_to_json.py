@@ -1,55 +1,104 @@
+import os
 import json
 import numpy as np
 
-INPUT_PATH = "dataset/processed/pca_hyperspectral.npy"
-OUTPUT_PATH = "dataset/processed/pca_map.json"
 
-# Load PCA result
-pca_cube = np.load(INPUT_PATH)
+BASE_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
 
-height, width, components = pca_cube.shape
+INPUT_FILE = os.path.join(
+    BASE_DIR,
+    "dataset",
+    "processed",
+    "pca_cube.npy"
+)
 
-# Use the first PCA component for visualization
-component = pca_cube[:, :, 0]
+OUTPUT_DIR = os.path.join(
+    BASE_DIR,
+    "frontend",
+    "public"
+)
 
-# Normalize values to 0–1 for map visualization
-minimum = component.min()
-maximum = component.max()
+OUTPUT_FILE = os.path.join(
+    OUTPUT_DIR,
+    "pca_map.json"
+)
 
-normalized = (component - minimum) / (maximum - minimum)
+os.makedirs(
+    OUTPUT_DIR,
+    exist_ok=True
+)
 
-# Create map points
-points = []
 
-# Example farm location around Visakhapatnam
-base_longitude = 83.2185
-base_latitude = 17.6868
+pca_cube = np.load(
+    INPUT_FILE
+)
+
+height, width, components = \
+    pca_cube.shape
+
+
+data = []
+
 
 for row in range(height):
+
     for col in range(width):
 
-        longitude = base_longitude + (col - width / 2) * 0.00005
-        latitude = base_latitude + (row - height / 2) * 0.00005
+        # Geographic coordinate
+        lon = 80.0000 + (
+            col * 0.0001
+        )
 
-        points.append({
-            "longitude": float(longitude),
-            "latitude": float(latitude),
-            "value": float(normalized[row, col])
+        lat = 16.0000 - (
+            row * 0.0001
+        )
+
+        data.append({
+
+            "lat": float(lat),
+
+            "lon": float(lon),
+
+            "pc1": float(
+                pca_cube[row, col, 0]
+            ),
+
+            "pc2": float(
+                pca_cube[row, col, 1]
+            ),
+
+            "pc3": float(
+                pca_cube[row, col, 2]
+            )
+
         })
 
-output = {
-    "width": width,
-    "height": height,
-    "components": components,
-    "component_used": 1,
-    "points": points
-}
 
-with open(OUTPUT_PATH, "w") as file:
-    json.dump(output, file)
+with open(
+    OUTPUT_FILE,
+    "w"
+) as file:
 
-print("PCA map data created successfully!")
-print("Shape:", pca_cube.shape)
-print("Component used: PCA 1")
-print("Number of map points:", len(points))
-print("Saved:", OUTPUT_PATH)
+    json.dump(
+        data,
+        file
+    )
+
+
+print(
+    "PCA JSON created successfully!"
+)
+
+print(
+    "Pixels:",
+    len(data)
+)
+
+print(
+    "Output:",
+    OUTPUT_FILE
+)

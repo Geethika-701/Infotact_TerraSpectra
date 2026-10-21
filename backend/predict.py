@@ -1,53 +1,21 @@
-import json
-import os
-
 import numpy as np
 import torch
 
-from model import Hybrid3DCNN
-from week2_preprocessing import (
-    prepare_week2_data
-)
+from model import TerraSpectra3DCNN
 
 
-MODEL_PATH = (
-    "results/training/"
-    "hybrid_3dcnn.pth"
-)
+CUBE_PATH = "dataset/raw/mock_hyperspectral_cube.npy"
 
-OUTPUT_PATH = (
-    "results/predictions/"
-    "predictions.json"
-)
-
-BASE_LONGITUDE = 83.2185
-BASE_LATITUDE = 17.6868
-
-PIXEL_STEP = 0.00005
+MODEL_PATH = "models/terraspectra_3dcnn.pth"
 
 
-def predict():
+LONGITUDE = 83.2185
+LATITUDE = 17.6868
 
-    print("=" * 60)
-    print("TerraSpectra Week 2")
-    print("Hybrid 3D-CNN Prediction")
-    print("=" * 60)
+PIXEL_SIZE = 0.00008
 
-    if not os.path.exists(
-        MODEL_PATH
-    ):
 
-        raise FileNotFoundError(
-            "Trained model not found.\n"
-            "Run train.py first."
-        )
-
-    (
-        hyperspectral,
-        pca,
-        labels,
-        coordinates
-    ) = prepare_week2_data()
+def load_model():
 
     device = torch.device(
         "cuda"
@@ -55,260 +23,187 @@ def predict():
         else "cpu"
     )
 
-    print(
-        "\nPrediction device:",
-        device
-    )
-
-    # --------------------------------------------------
-    # Load model
-    # --------------------------------------------------
-
-    model = Hybrid3DCNN(
-        num_classes=2
-    ).to(device)
-
-    checkpoint = torch.load(
-        MODEL_PATH,
-        map_location=device
-    )
+    model = TerraSpectra3DCNN()
 
     model.load_state_dict(
-        checkpoint["model_state_dict"]
+        torch.load(
+            MODEL_PATH,
+            map_location=device
+        )
     )
+
+    model = model.to(device)
 
     model.eval()
 
-    # --------------------------------------------------
-    # Convert data
-    # --------------------------------------------------
+    return model, device
 
-    hs_tensor = torch.tensor(
-        hyperspectral,
-        dtype=torch.float32
+
+def predict_grid():
+
+    cube = np.load(
+        CUBE_PATH
+    ).astype(
+        np.float32
     )
 
-    pca_tensor = torch.tensor(
-        pca,
-        dtype=torch.float32
+    mean = cube.mean()
+
+    std = cube.std()
+
+    cube = (
+        cube - mean
+    ) / (
+        std + 1e-8
     )
 
-    predictions = []
+    model, device = load_model()
 
-    # --------------------------------------------------
-    # Batch inference
-    # --------------------------------------------------
+    results = []
 
-    batch_size = 32
+    patch_size = 7
 
-    total_samples = len(
-        hs_tensor
-    )
+    margin = patch_size // 2
+
+    height, width, _ = cube.shape
 
     with torch.no_grad():
 
-        for start in range(
-            0,
-            total_samples,
-            batch_size
+        for row in range(
+            margin,
+            height - margin,
+            2
         ):
 
-            end = min(
-                start + batch_size,
-                total_samples
-            )
-
-            hs_batch = (
-                hs_tensor[start:end]
-                .to(device)
-            )
-
-            pca_batch = (
-                pca_tensor[start:end]
-                .to(device)
-            )
-
-            outputs = model(
-                hs_batch,
-                pca_batch
-            )
-
-            probabilities = torch.softmax(
-                outputs,
-                dim=1
-            )
-
-            predicted_classes = torch.argmax(
-                probabilities,
-                dim=1
-            )
-
-            for index in range(
-                end - start
+            for col in range(
+                margin,
+                width - margin,
+                2
             ):
 
-                row, col = coordinates[
-                    start + index
+                patch = cube[
+                    row - margin:
+                    row + margin + 1,
+
+                    col - margin:
+                    col + margin + 1,
+
+                    :
                 ]
 
-                class_id = int(
-                    predicted_classes[index]
-                    .item()
+                patch = np.transpose(
+                    patch,
+                    (2, 0, 1)
                 )
 
-                confidence = float(
-                    probabilities[
-                        index,
-                        class_id
-                    ].item()
+                tensor = torch.tensor(
+                    patch,
+                    dtype=torch.float32
                 )
 
-                if class_id == 0:
+                tensor = tensor.unsqueeze(
+                    0
+                )
 
-                    status = "healthy"
+                tensor = tensor.unsqueeze(
+                    0
+                )
+
+                tensor = tensor.to(
+                    device
+                )
+
+                output = model(
+                    tensor
+                )
+
+                probabilities = torch.softmax(
+                    output,
+                    dim=1
+                )
+
+                risk = probabilities[
+                    0,
+                    1
+                ].item()
+
+                lon = (
+                    LONGITUDE
+                    +
+                    (
+                        col - width / 2
+                    )
+                    *
+                    PIXEL_SIZE
+                )
+
+                lat = (
+                    LATITUDE
+                    +
+                    (
+                        row - height / 2
+                    )
+                    *
+                    PIXEL_SIZE
+                )
+
+                half = PIXEL_SIZE
+
+                polygon = [
+
+                    [
+                        lon - half,
+                        lat - half
+                    ],
+
+                    [
+                        lon + half,
+                        lat - half
+                    ],
+
+                    [
+                        lon + half,
+                        lat + half
+                    ],
+
+                    [
+                        lon - half,
+                        lat + half
+                    ]
+
+                ]
+
+                if risk >= 0.7:
+
+                    label = "High Risk"
+
+                elif risk >= 0.4:
+
+                    label = "Moderate"
 
                 else:
 
-                    status = (
-                        "chemically_stressed"
-                    )
+                    label = "Healthy"
 
-                longitude = (
-                    BASE_LONGITUDE
-                    + (
-                        col - 32
-                    )
-                    * PIXEL_STEP
-                )
+                results.append({
 
-                latitude = (
-                    BASE_LATITUDE
-                    + (
-                        row - 32
-                    )
-                    * PIXEL_STEP
-                )
+                    "row": row,
 
-                predictions.append(
-                    {
-                        "row": int(row),
+                    "col": col,
 
-                        "column": int(col),
+                    "longitude": lon,
 
-                        "longitude": float(
-                            longitude
-                        ),
+                    "latitude": lat,
 
-                        "latitude": float(
-                            latitude
-                        ),
+                    "risk": round(
+                        risk,
+                        4
+                    ),
 
-                        "status": status,
+                    "label": label,
 
-                        "class_id": class_id,
+                    "polygon": polygon
 
-                        "probability": confidence
-                    }
-                )
+                })
 
-    # --------------------------------------------------
-    # Statistics
-    # --------------------------------------------------
-
-    healthy_count = sum(
-        item["status"] == "healthy"
-        for item in predictions
-    )
-
-    stressed_count = sum(
-        item["status"]
-        == "chemically_stressed"
-        for item in predictions
-    )
-
-    # --------------------------------------------------
-    # Output JSON
-    # --------------------------------------------------
-
-    output = {
-        "model": "Hybrid 3D-CNN",
-
-        "classes": [
-            "healthy",
-            "chemically_stressed"
-        ],
-
-        "source": (
-            "mock hyperspectral "
-            "GeoTIFF dataset"
-        ),
-
-        "total_predictions":
-            len(predictions),
-
-        "healthy_count":
-            healthy_count,
-
-        "chemically_stressed_count":
-            stressed_count,
-
-        "validation_accuracy":
-            checkpoint.get(
-                "validation_accuracy"
-            ),
-
-        "predictions":
-            predictions
-    }
-
-    os.makedirs(
-        "results/predictions",
-        exist_ok=True
-    )
-
-    with open(
-        OUTPUT_PATH,
-        "w"
-    ) as file:
-
-        json.dump(
-            output,
-            file,
-            indent=2
-        )
-
-    print("\nPrediction completed")
-    print("---------------------")
-
-    print(
-        "Total predictions:",
-        len(predictions)
-    )
-
-    print(
-        "Healthy:",
-        healthy_count
-    )
-
-    print(
-        "Chemically stressed:",
-        stressed_count
-    )
-
-    print(
-        "Validation accuracy:",
-        checkpoint.get(
-            "validation_accuracy"
-        )
-    )
-
-    print(
-        "Saved:",
-        OUTPUT_PATH
-    )
-
-    print("=" * 60)
-
-
-if __name__ == "__main__":
-    predict()
+    return results

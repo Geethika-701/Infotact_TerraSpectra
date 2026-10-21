@@ -1,42 +1,82 @@
+import os
 import rasterio
 import numpy as np
 
-GEOTIFF_PATH = "dataset/raw/mock_hyperspectral.tif"
+
+BASE_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
 
 
-def read_geotiff():
-    with rasterio.open(GEOTIFF_PATH) as src:
+DEFAULT_FILE = os.path.join(
+    BASE_DIR,
+    "dataset",
+    "raw",
+    "mock_hyperspectral.tif"
+)
 
-        print("GeoTIFF Information")
-        print("--------------------")
-        print("Width       :", src.width)
-        print("Height      :", src.height)
-        print("Bands       :", src.count)
-        print("CRS         :", src.crs)
-        print("Data Type   :", src.dtypes[0])
+
+def read_hyperspectral(
+    file_path=DEFAULT_FILE
+):
+
+    with rasterio.open(file_path) as src:
 
         # Rasterio returns:
-        # (bands, height, width)
-        data = src.read()
+        # Bands × Height × Width
 
-        # Convert to:
-        # (height, width, bands)
-        cube = np.transpose(
-            data,
-            (1, 2, 0)
-        )
+        raster_cube = src.read()
 
         profile = src.profile
 
-    return cube, profile
+        transform = src.transform
+
+        crs = src.crs
+
+        bounds = src.bounds
+
+        width = src.width
+
+        height = src.height
+
+        count = src.count
+
+
+    # Convert:
+    #
+    # Bands × Height × Width
+    #
+    # to:
+    #
+    # Height × Width × Bands
+
+    cube = np.transpose(
+        raster_cube,
+        (1, 2, 0)
+    )
+
+    print("=" * 60)
+    print("Hyperspectral Data")
+    print("=" * 60)
+
+    print("Cube shape:", cube.shape)
+    print("Height:", height)
+    print("Width:", width)
+    print("Bands:", count)
+    print("CRS:", crs)
+    print("Bounds:", bounds)
+
+    return (
+        cube,
+        profile,
+        transform,
+        crs,
+        bounds
+    )
 
 
 if __name__ == "__main__":
 
-    cube, profile = read_geotiff()
-
-    print("\nLoaded Cube")
-    print("-----------")
-    print("Shape:", cube.shape)
-    print("Minimum:", cube.min())
-    print("Maximum:", cube.max())
+    read_hyperspectral()

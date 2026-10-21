@@ -1,8 +1,8 @@
 numpy
-pandas
-matplotlib
 scikit-learn
-rasterio
-h5py
+joblib
 torch
-torchvision
+fastapi
+uvicorn
+h5py
+rasterio

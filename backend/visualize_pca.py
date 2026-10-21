@@ -2,61 +2,104 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-INPUT_PATH = "dataset/processed/pca_hyperspectral.npy"
-OUTPUT_DIR = "results/pca"
 
-
-def visualize_pca():
-
-    # Load PCA-reduced cube
-    pca_cube = np.load(INPUT_PATH)
-
-    os.makedirs(
-        OUTPUT_DIR,
-        exist_ok=True
+BASE_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
     )
+)
 
-    print("PCA Cube Shape:", pca_cube.shape)
-
-    # Visualize first 3 components
-    for component in range(3):
-
-        image = pca_cube[:, :, component]
-
-        output_path = os.path.join(
-            OUTPUT_DIR,
-            f"pca_component_{component + 1}.png"
-        )
-
-        plt.figure(
-            figsize=(7, 6)
-        )
-
-        plt.imshow(
-            image,
-            cmap="viridis"
-        )
-
-        plt.colorbar(
-            label="Component Value"
-        )
-
-        plt.title(
-            f"PCA Component {component + 1}"
-        )
-
-        plt.axis("off")
-
-        plt.savefig(
-            output_path,
-            dpi=150,
-            bbox_inches="tight"
-        )
-
-        plt.close()
-
-        print("Saved:", output_path)
+FILE = os.path.join(
+    BASE_DIR,
+    "dataset",
+    "processed",
+    "pca_cube.npy"
+)
 
 
-if __name__ == "__main__":
-    visualize_pca()
+pca_cube = np.load(FILE)
+
+print(
+    "PCA cube shape:",
+    pca_cube.shape
+)
+
+
+# PC1
+
+plt.figure(
+    figsize=(8, 6)
+)
+
+plt.imshow(
+    pca_cube[:, :, 0],
+    cmap="viridis"
+)
+
+plt.colorbar(
+    label="PC1"
+)
+
+plt.title(
+    "TerraSpectra - Principal Component 1"
+)
+
+plt.xlabel(
+    "Pixel Column"
+)
+
+plt.ylabel(
+    "Pixel Row"
+)
+
+plt.tight_layout()
+
+plt.show()
+
+
+# PC2
+
+plt.figure(
+    figsize=(8, 6)
+)
+
+plt.imshow(
+    pca_cube[:, :, 1],
+    cmap="viridis"
+)
+
+plt.colorbar(
+    label="PC2"
+)
+
+plt.title(
+    "TerraSpectra - Principal Component 2"
+)
+
+plt.tight_layout()
+
+plt.show()
+
+
+# PC3
+
+plt.figure(
+    figsize=(8, 6)
+)
+
+plt.imshow(
+    pca_cube[:, :, 2],
+    cmap="viridis"
+)
+
+plt.colorbar(
+    label="PC3"
+)
+
+plt.title(
+    "TerraSpectra - Principal Component 3"
+)
+
+plt.tight_layout()
+
+plt.show()

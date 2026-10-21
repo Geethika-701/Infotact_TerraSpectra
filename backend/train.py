@@ -3,109 +3,163 @@ import os
 import numpy as np
 import torch
 
-from torch.utils.data import (
-    TensorDataset,
-    DataLoader,
-    random_split
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+
+import torch.nn as nn
+import torch.optim as optim
+
+from model import TerraSpectra3DCNN
+
+
+CUBE_PATH = "dataset/raw/mock_hyperspectral_cube.npy"
+LABEL_PATH = "dataset/raw/labels.npy"
+
+MODEL_DIR = "models"
+
+MODEL_PATH = os.path.join(
+    MODEL_DIR,
+    "terraspectra_3dcnn.pth"
 )
 
-from torch import nn
 
-from model import Hybrid3DCNN
-from week2_preprocessing import (
-    prepare_week2_data
-)
+class HyperspectralDataset(Dataset):
 
-
-MODEL_PATH = (
-    "results/training/"
-    "hybrid_3dcnn.pth"
-)
-
-BATCH_SIZE = 32
-EPOCHS = 5
-LEARNING_RATE = 0.001
-
-
-def train_model():
-
-    print("=" * 60)
-    print("TerraSpectra Week 2")
-    print("Hybrid 3D-CNN Training")
-    print("=" * 60)
-
-    (
-        hyperspectral,
-        pca,
+    def __init__(
+        self,
+        cube,
         labels,
-        coordinates
-    ) = prepare_week2_data()
+        patch_size=7
+    ):
 
-    # --------------------------------------------------
-    # Convert numpy arrays to tensors
-    # --------------------------------------------------
+        self.cube = cube
+        self.labels = labels
 
-    hs_tensor = torch.tensor(
-        hyperspectral,
-        dtype=torch.float32
-    )
+        self.patch_size = patch_size
 
-    pca_tensor = torch.tensor(
-        pca,
-        dtype=torch.float32
-    )
+        margin = patch_size // 2
 
-    label_tensor = torch.tensor(
-        labels,
-        dtype=torch.long
-    )
+        self.samples = []
 
-    dataset = TensorDataset(
-        hs_tensor,
-        pca_tensor,
-        label_tensor
-    )
+        height, width, _ = cube.shape
 
-    # --------------------------------------------------
-    # Train / validation split
-    # --------------------------------------------------
+        for row in range(
+            margin,
+            height - margin
+        ):
 
-    total_size = len(dataset)
+            for col in range(
+                margin,
+                width - margin
+            ):
 
-    train_size = int(
-        total_size * 0.8
-    )
+                label = labels[row, col]
 
-    validation_size = (
-        total_size - train_size
-    )
+                self.samples.append(
+                    (row, col, label)
+                )
 
-    train_dataset, validation_dataset = (
-        random_split(
-            dataset,
-            [
-                train_size,
-                validation_size
-            ],
-            generator=torch.Generator().manual_seed(42)
+    def __len__(self):
+
+        return len(self.samples)
+
+    def __getitem__(self, index):
+
+        row, col, label = self.samples[index]
+
+        margin = self.patch_size // 2
+
+        patch = self.cube[
+            row - margin:
+            row + margin + 1,
+
+            col - margin:
+            col + margin + 1,
+
+            :
+        ]
+
+        # H, W, Bands
+        # →
+        # Bands, H, W
+        patch = np.transpose(
+            patch,
+            (2, 0, 1)
         )
+
+        patch = torch.tensor(
+            patch,
+            dtype=torch.float32
+        )
+
+        # Add channel dimension
+        patch = patch.unsqueeze(0)
+
+        label = torch.tensor(
+            label,
+            dtype=torch.long
+        )
+
+        return patch, label
+
+
+def main():
+
+    os.makedirs(
+        MODEL_DIR,
+        exist_ok=True
     )
 
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=BATCH_SIZE,
+    print("Loading dataset...")
+
+    cube = np.load(
+        CUBE_PATH
+    )
+
+    labels = np.load(
+        LABEL_PATH
+    )
+
+    print(
+        "Cube:",
+        cube.shape
+    )
+
+    print(
+        "Labels:",
+        labels.shape
+    )
+
+    # Normalize values
+    cube = cube.astype(
+        np.float32
+    )
+
+    mean = cube.mean()
+
+    std = cube.std()
+
+    cube = (
+        cube - mean
+    ) / (
+        std + 1e-8
+    )
+
+    dataset = HyperspectralDataset(
+        cube,
+        labels
+    )
+
+    print(
+        "Training samples:",
+        len(dataset)
+    )
+
+    loader = DataLoader(
+        dataset,
+        batch_size=16,
         shuffle=True
     )
-
-    validation_loader = DataLoader(
-        validation_dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=False
-    )
-
-    # --------------------------------------------------
-    # Device
-    # --------------------------------------------------
 
     device = torch.device(
         "cuda"
@@ -114,230 +168,96 @@ def train_model():
     )
 
     print(
-        "\nTraining device:",
+        "Training device:",
         device
     )
 
-    # --------------------------------------------------
-    # Model
-    # --------------------------------------------------
+    model = TerraSpectra3DCNN()
 
-    model = Hybrid3DCNN(
-        num_classes=2
-    ).to(device)
+    model = model.to(device)
 
     criterion = nn.CrossEntropyLoss()
 
-    optimizer = torch.optim.Adam(
+    optimizer = optim.Adam(
         model.parameters(),
-        lr=LEARNING_RATE
+        lr=0.001
     )
 
-    best_validation_accuracy = 0.0
-
-    os.makedirs(
-        "results/training",
-        exist_ok=True
-    )
-
-    # --------------------------------------------------
-    # Training
-    # --------------------------------------------------
+    epochs = 5
 
     for epoch in range(
-        EPOCHS
+        epochs
     ):
 
         model.train()
 
-        total_loss = 0.0
+        total_loss = 0
 
         correct = 0
+
         total = 0
 
-        for (
-            hs_batch,
-            pca_batch,
-            labels_batch
-        ) in train_loader:
+        for patches, targets in loader:
 
-            hs_batch = hs_batch.to(
+            patches = patches.to(
                 device
             )
 
-            pca_batch = pca_batch.to(
-                device
-            )
-
-            labels_batch = labels_batch.to(
+            targets = targets.to(
                 device
             )
 
             optimizer.zero_grad()
 
             outputs = model(
-                hs_batch,
-                pca_batch
+                patches
             )
 
             loss = criterion(
                 outputs,
-                labels_batch
+                targets
             )
 
             loss.backward()
 
             optimizer.step()
 
-            total_loss += (
-                loss.item()
-                * labels_batch.size(0)
-            )
+            total_loss += loss.item()
 
-            predictions = (
-                torch.argmax(
-                    outputs,
-                    dim=1
-                )
+            predictions = torch.argmax(
+                outputs,
+                dim=1
             )
 
             correct += (
-                predictions == labels_batch
+                predictions == targets
             ).sum().item()
 
-            total += (
-                labels_batch.size(0)
-            )
+            total += targets.size(0)
 
-        train_loss = (
-            total_loss / total
-        )
-
-        train_accuracy = (
+        accuracy = (
             correct / total
-        )
-
-        # --------------------------------------------------
-        # Validation
-        # --------------------------------------------------
-
-        model.eval()
-
-        validation_correct = 0
-        validation_total = 0
-
-        with torch.no_grad():
-
-            for (
-                hs_batch,
-                pca_batch,
-                labels_batch
-            ) in validation_loader:
-
-                hs_batch = hs_batch.to(
-                    device
-                )
-
-                pca_batch = pca_batch.to(
-                    device
-                )
-
-                labels_batch = labels_batch.to(
-                    device
-                )
-
-                outputs = model(
-                    hs_batch,
-                    pca_batch
-                )
-
-                predictions = (
-                    torch.argmax(
-                        outputs,
-                        dim=1
-                    )
-                )
-
-                validation_correct += (
-                    predictions == labels_batch
-                ).sum().item()
-
-                validation_total += (
-                    labels_batch.size(0)
-                )
-
-        validation_accuracy = (
-            validation_correct
-            / validation_total
-        )
+        ) * 100
 
         print(
-            f"\nEpoch {epoch + 1}/{EPOCHS}"
+            f"Epoch {epoch + 1}/{epochs} "
+            f"Loss: {total_loss:.4f} "
+            f"Accuracy: {accuracy:.2f}%"
         )
 
-        print(
-            f"Training Loss: {train_loss:.4f}"
-        )
-
-        print(
-            f"Training Accuracy: "
-            f"{train_accuracy:.4f}"
-        )
-
-        print(
-            f"Validation Accuracy: "
-            f"{validation_accuracy:.4f}"
-        )
-
-        # Save best model
-
-        if (
-            validation_accuracy
-            > best_validation_accuracy
-        ):
-
-            best_validation_accuracy = (
-                validation_accuracy
-            )
-
-            torch.save(
-                {
-                    "model_state_dict":
-                        model.state_dict(),
-
-                    "validation_accuracy":
-                        validation_accuracy,
-
-                    "classes": [
-                        "healthy",
-                        "chemically_stressed"
-                    ]
-                },
-                MODEL_PATH
-            )
-
-            print(
-                "Best model saved."
-            )
-
-    print("\n" + "=" * 60)
-
-    print(
-        "Training completed."
-    )
-
-    print(
-        "Best validation accuracy:",
-        f"{best_validation_accuracy:.4f}"
-    )
-
-    print(
-        "Model saved:",
+    torch.save(
+        model.state_dict(),
         MODEL_PATH
     )
 
-    print("=" * 60)
+    print(
+        "\n3D-CNN model saved:"
+    )
+
+    print(
+        MODEL_PATH
+    )
 
 
 if __name__ == "__main__":
-    train_model()
+    main()
