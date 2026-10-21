@@ -1,341 +1,193 @@
+
 import React, { useEffect, useState } from "react";
 
+import Sidebar from "./components/Sidebar";
+import Header from "./components/Header";
+import StatCard from "./components/StatCard";
 import FarmMap from "./components/FarmMap";
+import RiskSummary from "./components/RiskSummary";
+import SpectralAnalysis from "./components/SpectralAnalysis";
+import Pipeline from "./components/Pipeline";
 
-function App() {
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+
+export default function App() {
   const [predictions, setPredictions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [apiOnline, setApiOnline] = useState(false);
 
   useEffect(() => {
-    fetch("/predictions.json")
-      .then((response) => {
+    async function loadPredictions() {
+      try {
+        const response = await fetch(`${API_URL}/predictions`);
+
         if (!response.ok) {
-          throw new Error("Failed to load predictions.json");
+          throw new Error("Prediction API failed");
         }
 
-        return response.json();
-      })
-      .then((data) => {
-        const rawPredictions = data.predictions || [];
+        const data = await response.json();
 
-        // Normalize prediction field names
-        // Supports either:
-        // status + probability
-        // OR
-        // class + confidence
-        const normalizedPredictions = rawPredictions.map((item) => ({
-          ...item,
-
-          status:
-            item.status ||
-            item.class ||
-            "healthy",
-
-          probability:
-            item.probability ??
-            item.confidence ??
-            0.8,
-        }));
-
-        setPredictions(normalizedPredictions);
+        setPredictions(data.predictions || []);
+        setApiOnline(true);
+      } catch (error) {
+        console.error("Backend connection error:", error);
+        setApiOnline(false);
+      } finally {
         setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Prediction data error:", err);
+      }
+    }
 
-        setError(err.message);
-        setLoading(false);
-      });
+    loadPredictions();
   }, []);
 
-  const healthyCount = predictions.filter(
-    (item) => item.status === "healthy"
+  // -----------------------------
+  // RISK CALCULATIONS
+  // -----------------------------
+
+  const highRisk = predictions.filter(
+    (item) => Number(item.risk) >= 0.7
   ).length;
 
-  const stressedCount = predictions.filter(
-    (item) => item.status === "chemically_stressed"
+  const moderateRisk = predictions.filter(
+    (item) =>
+      Number(item.risk) >= 0.4 &&
+      Number(item.risk) < 0.7
   ).length;
+
+  const healthy = predictions.filter(
+    (item) => Number(item.risk) < 0.4
+  ).length;
+
+  const total = predictions.length;
+
+  const riskPercentage =
+    total > 0
+      ? (((highRisk + moderateRisk) / total) * 100).toFixed(1)
+      : "0.0";
 
   return (
     <div className="app">
 
-      {/* HEADER */}
-
-      <header className="header">
-
-        <div>
-          <h1>TerraSpectra</h1>
-
-          <p>
-            Hyperspectral Crop Disease Forecasting
-          </p>
-        </div>
-
-        <div className="week-badge">
-          Week 2 — 3D-CNN Classification
-        </div>
-
-      </header>
-
-
-      {/* MAIN CONTENT */}
+      {/* SIDEBAR */}
+      <Sidebar />
 
       <main className="main-content">
 
-        {/* PROJECT INFORMATION */}
+        {/* HEADER */}
+        <Header />
 
-        <section className="project-info">
+        <section className="dashboard">
 
-          <div>
-            <h2>
-              Healthy vs Chemically Stressed
-              Pixel Classification
-            </h2>
-
-            <p>
-              Hybrid 3D-CNN prediction results
-              visualized on the farm map
-            </p>
-          </div>
-
-          <div className="status">
-
-            <span className="status-dot"></span>
-
-            {loading
-              ? "Loading predictions..."
-              : error
-              ? "Prediction data error"
-              : "Prediction data loaded"}
-
-          </div>
-
-        </section>
-
-
-        {/* ERROR */}
-
-        {error && (
-          <div
-            style={{
-              padding: "15px",
-              marginBottom: "20px",
-              background: "#fee2e2",
-              color: "#991b1b",
-              borderRadius: "8px",
-              border: "1px solid #fecaca",
-            }}
-          >
-            Error: {error}
-          </div>
-        )}
-
-
-        {/* STATISTICS */}
-
-        {!loading && !error && (
-          <section className="stats">
-
-            <div className="stat-card">
-
-              <span className="stat-label">
-                Total Classified Pixels
-              </span>
-
-              <strong>
-                {predictions.length}
-              </strong>
-
-            </div>
-
-
-            <div className="stat-card healthy">
-
-              <span className="stat-label">
-                Healthy Pixels
-              </span>
-
-              <strong>
-                {healthyCount}
-              </strong>
-
-            </div>
-
-
-            <div className="stat-card stressed">
-
-              <span className="stat-label">
-                Chemically Stressed Pixels
-              </span>
-
-              <strong>
-                {stressedCount}
-              </strong>
-
-            </div>
-
-          </section>
-        )}
-
-
-        {/* MAP */}
-
-        <section className="map-section">
-
-          <div className="map-header">
+          {/* PAGE TITLE */}
+          <div className="page-heading">
 
             <div>
+              <span className="eyebrow">
+                PRECISION AGRICULTURE · AI MONITORING
+              </span>
 
-              <h2>
-                Hyperspectral Classification Map
-              </h2>
+              <h1>Farm Overview</h1>
 
               <p>
-                Hybrid 3D-CNN pixel classification
-                overlay
+                Hyperspectral crop stress detection using
+                spatial-spectral deep learning.
               </p>
-
             </div>
 
+            <div
+              className={
+                apiOnline
+                  ? "backend-status online"
+                  : "backend-status"
+              }
+            >
+              <span></span>
 
-            <div className="legend">
-
-              <div className="legend-item">
-
-                <span className="legend-color healthy-color"></span>
-
-                Healthy
-
-              </div>
-
-
-              <div className="legend-item">
-
-                <span className="legend-color stressed-color"></span>
-
-                Chemically Stressed
-
-              </div>
-
+              {loading
+                ? "CONNECTING..."
+                : apiOnline
+                ? "AI ENGINE ONLINE"
+                : "AI ENGINE OFFLINE"}
             </div>
 
           </div>
 
+          {/* KPI CARDS */}
+          <div className="stats-grid">
 
-          <div className="map-wrapper">
+            <StatCard
+              label="FARM AREA"
+              value="1,000"
+              unit="ACRES"
+            />
 
-            {loading ? (
-              <div className="loading">
+            <StatCard
+              label="SPECTRAL BANDS"
+              value="224"
+              unit="BANDS"
+            />
 
-                <div className="spinner"></div>
+            <StatCard
+              label="MODEL"
+              value="3D-CNN"
+              unit="ACTIVE"
+            />
 
-                <p>
-                  Loading classification results...
-                </p>
-
-              </div>
-            ) : error ? (
-              <div className="loading">
-
-                <p>
-                  Unable to load prediction data.
-                </p>
-
-              </div>
-            ) : (
-              <FarmMap
-                predictions={predictions}
-              />
-            )}
-
-          </div>
-
-        </section>
-
-
-        {/* MODEL INFORMATION */}
-
-        <section className="model-info">
-
-          <div className="info-card">
-
-            <h3>
-              Week 2 Model
-            </h3>
-
-            <p>
-              Hybrid 3D-CNN implemented using
-              PyTorch for hyperspectral pixel
-              classification into healthy and
-              chemically stressed categories.
-            </p>
+            <StatCard
+              label="RISK ZONES"
+              value={`${riskPercentage}%`}
+              unit="DETECTED"
+            />
 
           </div>
 
+          {/* MAP */}
+          <section className="map-section">
 
-          <div className="info-card">
+            <div className="section-heading">
 
-            <h3>
-              Processing Pipeline
-            </h3>
+              <div>
+                <span>WEEK 2 · GEOSPATIAL AI</span>
+                <h2>Satellite Risk Map</h2>
+              </div>
 
-            <div className="pipeline">
+              <div className="prediction-count">
 
-              <span>
-                Hyperspectral Data
-              </span>
+                {loading
+                  ? "ANALYZING HYPERSPECTRAL DATA..."
+                  : `${predictions.length} ZONES ANALYZED`}
 
-              <span className="arrow">
-                →
-              </span>
-
-              <span>
-                PCA
-              </span>
-
-              <span className="arrow">
-                →
-              </span>
-
-              <span>
-                Hybrid 3D-CNN
-              </span>
-
-              <span className="arrow">
-                →
-              </span>
-
-              <span>
-                Predictions
-              </span>
-
-              <span className="arrow">
-                →
-              </span>
-
-              <span>
-                Map
-              </span>
+              </div>
 
             </div>
 
+            <FarmMap
+              predictions={predictions}
+            />
+
+          </section>
+
+          {/* ANALYTICS */}
+          <div className="dashboard-grid">
+
+            <RiskSummary
+              highRisk={highRisk}
+              moderateRisk={moderateRisk}
+              healthy={healthy}
+            />
+
+            <SpectralAnalysis />
+
           </div>
+
+          {/* PIPELINE */}
+          <Pipeline />
 
         </section>
 
       </main>
 
-
-      {/* FOOTER */}
-
-      <footer>
-        TerraSpectra — Hyperspectral Crop Disease
-        Forecasting
-      </footer>
-
     </div>
   );
 }
-
-export default App;

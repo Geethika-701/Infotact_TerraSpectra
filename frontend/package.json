@@ -9,9 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@deck.gl/core": "^9.4.0",
     "@deck.gl/layers": "^9.4.0",
     "@deck.gl/react": "^9.4.0",
-    "mapbox-gl": "^3.32.0",
+    "mapbox-gl": "^3.33.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-map-gl": "^8.1.3"

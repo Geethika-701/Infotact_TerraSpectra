@@ -1,79 +1,90 @@
-import React from "react";
-import { ScatterplotLayer } from "@deck.gl/layers";
-
-const HEALTHY_COLOR = [34, 197, 94, 190];
-const STRESSED_COLOR = [239, 68, 68, 210];
-
-function getColor(status, probability) {
-  const alpha = Math.max(
-    120,
-    Math.min(230, probability * 255)
-  );
-
-  if (status === "chemically_stressed") {
-    return [
-      STRESSED_COLOR[0],
-      STRESSED_COLOR[1],
-      STRESSED_COLOR[2],
-      alpha,
-    ];
-  }
-
-  return [
-    HEALTHY_COLOR[0],
-    HEALTHY_COLOR[1],
-    HEALTHY_COLOR[2],
-    alpha,
-  ];
-}
+import { PolygonLayer } from "@deck.gl/layers";
 
 export default function Heatmap({
   predictions = [],
 }) {
-  return new ScatterplotLayer({
-    id: "terraspectra-week2-heatmap",
+
+  if (
+    !predictions ||
+    predictions.length === 0
+  ) {
+    return null;
+  }
+
+  return new PolygonLayer({
+
+    id: "terra-spectra-risk-grid",
 
     data: predictions,
 
-    getPosition: (d) => [
-      d.longitude,
-      d.latitude,
-    ],
-
-    getFillColor: (d) =>
-      getColor(
-        d.status,
-        d.probability ?? 0.8
-      ),
-
-    getRadius: 18,
-
-    radiusMinPixels: 4,
-    radiusMaxPixels: 20,
-
     pickable: true,
 
+    filled: true,
+
     stroked: true,
+
+    getPolygon: (d) => d.polygon,
+
+    getFillColor: (d) => {
+
+      const risk =
+        Number(
+          d.risk ??
+          d.probability ??
+          0
+        );
+
+      if (risk >= 0.7) {
+        return [
+          239,
+          68,
+          68,
+          190,
+        ];
+      }
+
+      if (risk >= 0.4) {
+        return [
+          234,
+          179,
+          8,
+          175,
+        ];
+      }
+
+      return [
+        34,
+        197,
+        94,
+        150,
+      ];
+    },
 
     getLineColor: [
       255,
       255,
       255,
-      180,
+      100,
     ],
+
+    getLineWidth: 1,
 
     lineWidthMinPixels: 1,
 
-    getTooltip: (info) => {
-      if (!info.object) {
-        return null;
-      }
+    opacity: 0.85,
 
-      return {
-        text:
-          `Classification: ${info.object.status}\n` +
-          `Probability: ${(info.object.probability * 100).toFixed(2)}%`,
-      };
+    autoHighlight: true,
+
+    highlightColor: [
+      255,
+      255,
+      255,
+      80,
+    ],
+
+    parameters: {
+      depthTest: false,
     },
+
   });
 }
