@@ -7,8 +7,30 @@ def generate_tiles(
     tile_width=16,
     overlap=4
 ):
+    """
+    Split a hyperspectral cube into overlapping tiles.
+
+    Input:
+        cube -> [height, width, bands]
+
+    Example:
+        [64, 64, 224]
+
+    Output:
+        List of overlapping tiles.
+    """
 
     height, width, bands = cube.shape
+
+    if overlap >= tile_height:
+        raise ValueError(
+            "Overlap must be smaller than tile height."
+        )
+
+    if overlap >= tile_width:
+        raise ValueError(
+            "Overlap must be smaller than tile width."
+        )
 
     step_y = tile_height - overlap
     step_x = tile_width - overlap
@@ -83,6 +105,12 @@ def stitch_predictions(
     height,
     width
 ):
+    """
+    Stitch overlapping tile predictions.
+
+    When multiple tiles cover the same pixel,
+    their predictions are averaged.
+    """
 
     prediction_sum = np.zeros(
         (height, width),
@@ -135,6 +163,9 @@ def tile_info(
     tile_width=16,
     overlap=4
 ):
+    """
+    Return metadata about the tiling configuration.
+    """
 
     height, width, bands = cube.shape
 
@@ -152,5 +183,7 @@ def tile_info(
         "tile_height": tile_height,
         "tile_width": tile_width,
         "overlap": overlap,
+        "step_height": tile_height - overlap,
+        "step_width": tile_width - overlap,
         "number_of_tiles": len(tiles)
     }

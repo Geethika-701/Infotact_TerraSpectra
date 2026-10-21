@@ -1,9 +1,7 @@
 FARM_ACRES = 1000.0
 
 
-def calculate_analytics(
-    predictions
-):
+def calculate_analytics(predictions):
 
     total = len(predictions)
 
@@ -37,23 +35,19 @@ def calculate_analytics(
     if total > 0:
 
         risk_percentage = (
-            risk_zones /
-            total
+            risk_zones / total
         ) * 100
 
         high_percentage = (
-            high_risk /
-            total
+            high_risk / total
         ) * 100
 
         moderate_percentage = (
-            moderate_risk /
-            total
+            moderate_risk / total
         ) * 100
 
         healthy_percentage = (
-            healthy /
-            total
+            healthy / total
         ) * 100
 
     else:
@@ -63,42 +57,32 @@ def calculate_analytics(
         moderate_percentage = 0
         healthy_percentage = 0
 
-    # Estimated acreage based on
-    # proportional prediction-zone coverage.
-
     risk_acres = (
-        risk_zones /
-        total *
-        FARM_ACRES
+        risk_zones / total * FARM_ACRES
         if total > 0
         else 0
     )
 
     high_risk_acres = (
-        high_risk /
-        total *
-        FARM_ACRES
+        high_risk / total * FARM_ACRES
         if total > 0
         else 0
     )
 
     moderate_acres = (
-        moderate_risk /
-        total *
-        FARM_ACRES
+        moderate_risk / total * FARM_ACRES
         if total > 0
         else 0
     )
 
     healthy_acres = (
-        healthy /
-        total *
-        FARM_ACRES
+        healthy / total * FARM_ACRES
         if total > 0
         else 0
     )
 
     return {
+
         "farm_area_acres": FARM_ACRES,
 
         "total_zones": total,
@@ -116,11 +100,14 @@ def calculate_analytics(
         ),
 
         "high_risk": {
+
             "zones": high_risk,
+
             "percentage": round(
                 high_percentage,
                 2
             ),
+
             "estimated_acres": round(
                 high_risk_acres,
                 2
@@ -128,11 +115,14 @@ def calculate_analytics(
         },
 
         "moderate": {
+
             "zones": moderate_risk,
+
             "percentage": round(
                 moderate_percentage,
                 2
             ),
+
             "estimated_acres": round(
                 moderate_acres,
                 2
@@ -140,11 +130,14 @@ def calculate_analytics(
         },
 
         "healthy": {
+
             "zones": healthy,
+
             "percentage": round(
                 healthy_percentage,
                 2
             ),
+
             "estimated_acres": round(
                 healthy_acres,
                 2
@@ -152,8 +145,13 @@ def calculate_analytics(
         },
 
         "chemical_anomalies": {
-            "chemical_stress_zones": risk_zones,
-            "spectral_anomaly_zones": risk_zones,
+
+            "chemical_stress_zones":
+                risk_zones,
+
+            "spectral_anomaly_zones":
+                risk_zones,
+
             "stress_class": (
                 "Elevated"
                 if risk_percentage >= 15
