@@ -28,6 +28,7 @@ from backend.tiling import (
     tile_info
 )
 
+
 CUBE_PATH = (
     "dataset/raw/mock_hyperspectral_cube.npy"
 )
@@ -35,7 +36,7 @@ CUBE_PATH = (
 
 app = FastAPI(
     title="TerraSpectra API",
-    version="3.0.0"
+    version="4.0.0"
 )
 
 
@@ -71,7 +72,7 @@ def root():
             "online",
 
         "version":
-            "3.0.0",
+            "4.0.0",
 
         "weeks": {
 
@@ -424,10 +425,7 @@ def tiled_inference():
 
     stitched_predictions = []
 
-    # Import here to avoid unnecessary model
-    # loading for endpoints that don't require it.
-
-    from fusion_predict import (
+    from backend.fusion_predict import (
         load_models,
         create_patch,
         predict_batch
@@ -623,4 +621,233 @@ def history_snapshot():
 
         "snapshot":
             saved
+    }
+
+
+# ==================================================
+# WEEK 4 RECONSTRUCTED TEMPORAL DEMONSTRATION
+# ==================================================
+
+@app.post("/history/demo")
+def create_demo_history():
+
+    from datetime import (
+        datetime,
+        timedelta
+    )
+
+    results = predict_fused_grid(
+        stride=2,
+        batch_size=16
+    )
+
+    analytics_data = calculate_analytics(
+        results
+    )
+
+    total_zones = int(
+        analytics_data.get(
+            "total_zones",
+            len(results)
+        )
+    )
+
+    current_risk = float(
+        analytics_data.get(
+            "risk_percentage",
+            14.06
+        )
+    )
+
+    current_acres = float(
+        analytics_data.get(
+            "risk_acres_estimated",
+            current_risk / 100.0 * 1000.0
+        )
+    )
+
+    current_high = int(
+        analytics_data.get(
+            "high_risk",
+            {}
+        ).get(
+            "zones",
+            144
+        )
+    )
+
+    current_moderate = int(
+        analytics_data.get(
+            "moderate",
+            {}
+        ).get(
+            "zones",
+            0
+        )
+    )
+
+    current_healthy = int(
+        analytics_data.get(
+            "healthy",
+            {}
+        ).get(
+            "zones",
+            total_zones - current_high - current_moderate
+        )
+    )
+
+    now = datetime.now()
+
+    risk_values = [
+        8.40,
+        10.10,
+        11.80,
+        13.20,
+        current_risk
+    ]
+
+    high_values = [
+        86,
+        103,
+        121,
+        135,
+        current_high
+    ]
+
+    moderate_values = [
+        0,
+        0,
+        0,
+        0,
+        current_moderate
+    ]
+
+    healthy_values = [
+        total_zones - high_values[0] - moderate_values[0],
+        total_zones - high_values[1] - moderate_values[1],
+        total_zones - high_values[2] - moderate_values[2],
+        total_zones - high_values[3] - moderate_values[3],
+        current_healthy
+    ]
+
+    labels = [
+        "Baseline Scan",
+        "Early Stress Signal",
+        "Progressive Stress",
+        "Elevated Monitoring",
+        "Current Scan"
+    ]
+
+    reconstructed_history = []
+
+    for index in range(5):
+
+        risk = risk_values[index]
+
+        if index == 4:
+            acres = current_acres
+        else:
+            acres = (
+                risk /
+                100.0 *
+                1000.0
+            )
+
+        timestamp = (
+            now -
+            timedelta(
+                days=4 - index
+            )
+        )
+
+        snapshot = {
+
+            "timestamp":
+                timestamp.isoformat(),
+
+            "label":
+                labels[index],
+
+            "model":
+                "3D-CNN + Vision Transformer",
+
+            "risk_percentage":
+                round(
+                    risk,
+                    2
+                ),
+
+            "risk_acres_estimated":
+                round(
+                    acres,
+                    2
+                ),
+
+            "high_risk_zones":
+                high_values[index],
+
+            "moderate_zones":
+                moderate_values[index],
+
+            "healthy_zones":
+                healthy_values[index],
+
+            "data_type":
+                "reconstructed_demo",
+
+            "temporal_note": (
+                "Reconstructed temporal "
+                "demonstration generated from "
+                "the current synthetic dataset; "
+                "not historical satellite imagery."
+            )
+        }
+
+        reconstructed_history.append(
+            snapshot
+        )
+
+    history_file = "dataset/history.json"
+
+    import os
+    import json
+
+    os.makedirs(
+        os.path.dirname(history_file),
+        exist_ok=True
+    )
+
+    with open(
+        history_file,
+        "w",
+        encoding="utf-8"
+    ) as file:
+
+        json.dump(
+            reconstructed_history,
+            file,
+            indent=2
+        )
+
+    return {
+
+        "status":
+            "demo_history_created",
+
+        "count":
+            len(reconstructed_history),
+
+        "history":
+            reconstructed_history,
+
+        "data_type":
+            "reconstructed_demo",
+
+        "note": (
+            "The temporal series is a "
+            "reconstructed demonstration based "
+            "on the current synthetic dataset. "
+            "It should not be presented as "
+            "historical satellite observations."
+        )
     }

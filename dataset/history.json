@@ -1,0 +1,62 @@
+[
+  {
+    "timestamp": "2026-10-19T22:16:42.044532",
+    "label": "Baseline Scan",
+    "model": "3D-CNN + Vision Transformer",
+    "risk_percentage": 8.4,
+    "risk_acres_estimated": 84.0,
+    "high_risk_zones": 86,
+    "moderate_zones": 0,
+    "healthy_zones": 938,
+    "data_type": "reconstructed_demo",
+    "temporal_note": "Reconstructed temporal demonstration generated from the current synthetic dataset; not historical satellite imagery."
+  },
+  {
+    "timestamp": "2026-10-20T22:16:42.044532",
+    "label": "Early Stress Signal",
+    "model": "3D-CNN + Vision Transformer",
+    "risk_percentage": 10.1,
+    "risk_acres_estimated": 101.0,
+    "high_risk_zones": 103,
+    "moderate_zones": 0,
+    "healthy_zones": 921,
+    "data_type": "reconstructed_demo",
+    "temporal_note": "Reconstructed temporal demonstration generated from the current synthetic dataset; not historical satellite imagery."
+  },
+  {
+    "timestamp": "2026-10-21T22:16:42.044532",
+    "label": "Progressive Stress",
+    "model": "3D-CNN + Vision Transformer",
+    "risk_percentage": 11.8,
+    "risk_acres_estimated": 118.0,
+    "high_risk_zones": 121,
+    "moderate_zones": 0,
+    "healthy_zones": 903,
+    "data_type": "reconstructed_demo",
+    "temporal_note": "Reconstructed temporal demonstration generated from the current synthetic dataset; not historical satellite imagery."
+  },
+  {
+    "timestamp": "2026-10-22T22:16:42.044532",
+    "label": "Elevated Monitoring",
+    "model": "3D-CNN + Vision Transformer",
+    "risk_percentage": 13.2,
+    "risk_acres_estimated": 132.0,
+    "high_risk_zones": 135,
+    "moderate_zones": 0,
+    "healthy_zones": 889,
+    "data_type": "reconstructed_demo",
+    "temporal_note": "Reconstructed temporal demonstration generated from the current synthetic dataset; not historical satellite imagery."
+  },
+  {
+    "timestamp": "2026-10-23T22:16:42.044532",
+    "label": "Current Scan",
+    "model": "3D-CNN + Vision Transformer",
+    "risk_percentage": 14.06,
+    "risk_acres_estimated": 140.62,
+    "high_risk_zones": 144,
+    "moderate_zones": 0,
+    "healthy_zones": 880,
+    "data_type": "reconstructed_demo",
+    "temporal_note": "Reconstructed temporal demonstration generated from the current synthetic dataset; not historical satellite imagery."
+  }
+]

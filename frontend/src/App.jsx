@@ -11,6 +11,7 @@ import RiskSummary from "./components/RiskSummary";
 import SpectralAnalysis from "./components/SpectralAnalysis";
 import Pipeline from "./components/Pipeline";
 import Analytics from "./components/Analytics";
+import HistoryTimeline from "./components/HistoryTimeline";
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
@@ -118,9 +119,10 @@ export default function App() {
     analyticsData?.risk_percentage ??
     (
       total > 0
-        ? ((highRisk + moderateRisk) /
-            total) *
-          100
+        ? (
+            (highRisk + moderateRisk) /
+            total
+          ) * 100
         : 0
     );
 
@@ -263,6 +265,10 @@ export default function App() {
 
           <Analytics
             id="analytics-section"
+          />
+
+          <HistoryTimeline
+            id="history-section"
           />
 
         </section>
