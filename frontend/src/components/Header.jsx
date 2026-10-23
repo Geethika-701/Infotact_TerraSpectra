@@ -1,6 +1,8 @@
 import React from "react";
 
-export default function Header({ apiOnline = false }) {
+export default function Header({
+  apiOnline = false
+}) {
   return (
     <header className="top-header">
 
@@ -11,14 +13,18 @@ export default function Header({ apiOnline = false }) {
         </div>
 
         <div>
-          <h2>TerraSpectra</h2>
+
+          <h2>
+            TerraSpectra
+          </h2>
+
           <span>
             Precision Crop Intelligence
           </span>
+
         </div>
 
       </div>
-
 
       <div className="header-right">
 
@@ -29,11 +35,13 @@ export default function Header({ apiOnline = false }) {
               : "system-status"
           }
         >
+
           <span></span>
 
           {apiOnline
             ? "SYSTEM ONLINE"
             : "SYSTEM OFFLINE"}
+
         </div>
 
         <div className="last-scan">

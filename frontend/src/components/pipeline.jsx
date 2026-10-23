@@ -6,27 +6,31 @@ export default function Pipeline() {
     {
       number: "01",
       title: "HYPERSPECTRAL INGESTION",
-      description: "224-band satellite data cube",
-      status: "COMPLETE",
+      description:
+        "224-band satellite data cube",
+      status: "COMPLETE"
     },
     {
       number: "02",
       title: "PCA REDUCTION",
-      description: "224 bands → 3 components",
-      status: "COMPLETE",
+      description:
+        "224 bands → 3 components",
+      status: "COMPLETE"
     },
     {
       number: "03",
-      title: "3D-CNN CLASSIFICATION",
-      description: "Spatial + spectral feature learning",
-      status: "ACTIVE",
+      title: "AI CLASSIFICATION",
+      description:
+        "3D-CNN + Vision Transformer",
+      status: "ACTIVE"
     },
     {
       number: "04",
-      title: "RISK HEATMAP",
-      description: "Pixel-level crop stress mapping",
-      status: "ACTIVE",
-    },
+      title: "RISK & ANOMALY MAPPING",
+      description:
+        "Spatial-spectral crop stress analysis",
+      status: "ACTIVE"
+    }
   ];
 
   return (
@@ -35,67 +39,74 @@ export default function Pipeline() {
       <div className="section-heading">
 
         <div>
+
           <span>
-            WEEK 1–2 · AI PROCESSING
+            AI PROCESSING
           </span>
 
           <h2>
             Analysis Pipeline
           </h2>
+
         </div>
 
         <div className="pipeline-week">
-          WEEK 1–2
+          AI FUSION ACTIVE
         </div>
 
       </div>
 
-
       <div className="pipeline">
 
-        {steps.map((step, index) => (
+        {steps.map(
+          (step, index) => (
 
-          <React.Fragment key={step.number}>
+            <React.Fragment
+              key={step.number}
+            >
 
-            <div className="pipeline-step">
+              <div className="pipeline-step">
 
-              <div className="pipeline-number">
-                {step.number}
+                <div className="pipeline-number">
+                  {step.number}
+                </div>
+
+                <div>
+
+                  <strong>
+                    {step.title}
+                  </strong>
+
+                  <p>
+                    {step.description}
+                  </p>
+
+                  <span
+                    className={
+                      step.status ===
+                      "ACTIVE"
+                        ? "pipeline-status active"
+                        : "pipeline-status complete"
+                    }
+                  >
+                    ● {step.status}
+                  </span>
+
+                </div>
+
               </div>
 
-              <div>
+              {index <
+                steps.length - 1 && (
+                <div className="pipeline-arrow">
+                  →
+                </div>
+              )}
 
-                <strong>
-                  {step.title}
-                </strong>
+            </React.Fragment>
 
-                <p>
-                  {step.description}
-                </p>
-
-                <span
-                  className={
-                    step.status === "ACTIVE"
-                      ? "pipeline-status active"
-                      : "pipeline-status complete"
-                  }
-                >
-                  ● {step.status}
-                </span>
-
-              </div>
-
-            </div>
-
-            {index < steps.length - 1 && (
-              <div className="pipeline-arrow">
-                →
-              </div>
-            )}
-
-          </React.Fragment>
-
-        ))}
+          )
+        )}
 
       </div>
 

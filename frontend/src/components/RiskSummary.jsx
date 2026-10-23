@@ -3,7 +3,7 @@ import React from "react";
 export default function RiskSummary({
   highRisk = 0,
   moderateRisk = 0,
-  healthy = 0,
+  healthy = 0
 }) {
   const total =
     highRisk +
@@ -26,13 +26,15 @@ export default function RiskSummary({
       <div className="risk-header">
 
         <div>
+
           <span>
-            WEEK 2 · AI CLASSIFICATION
+            AI CLASSIFICATION
           </span>
 
           <h3>
             Risk Summary
           </h3>
+
         </div>
 
         <strong>
@@ -41,18 +43,18 @@ export default function RiskSummary({
 
       </div>
 
-
       <div className="risk-list">
-
-        {/* HIGH */}
 
         <div className="risk-row">
 
           <div className="risk-row-title">
 
             <div className="risk-name">
+
               <span className="risk-dot high"></span>
+
               High Risk
+
             </div>
 
             <strong>
@@ -66,7 +68,9 @@ export default function RiskSummary({
             <div
               className="risk-progress high"
               style={{
-                width: `${percentage(highRisk)}%`,
+                width: `${percentage(
+                  highRisk
+                )}%`
               }}
             />
 
@@ -78,16 +82,16 @@ export default function RiskSummary({
 
         </div>
 
-
-        {/* MODERATE */}
-
         <div className="risk-row">
 
           <div className="risk-row-title">
 
             <div className="risk-name">
+
               <span className="risk-dot moderate"></span>
+
               Moderate
+
             </div>
 
             <strong>
@@ -101,7 +105,9 @@ export default function RiskSummary({
             <div
               className="risk-progress moderate"
               style={{
-                width: `${percentage(moderateRisk)}%`,
+                width: `${percentage(
+                  moderateRisk
+                )}%`
               }}
             />
 
@@ -113,16 +119,16 @@ export default function RiskSummary({
 
         </div>
 
-
-        {/* HEALTHY */}
-
         <div className="risk-row">
 
           <div className="risk-row-title">
 
             <div className="risk-name">
+
               <span className="risk-dot healthy"></span>
+
               Healthy
+
             </div>
 
             <strong>
@@ -136,7 +142,9 @@ export default function RiskSummary({
             <div
               className="risk-progress healthy"
               style={{
-                width: `${percentage(healthy)}%`,
+                width: `${percentage(
+                  healthy
+                )}%`
               }}
             />
 
@@ -150,7 +158,6 @@ export default function RiskSummary({
 
       </div>
 
-
       <div className="risk-footer">
 
         <span>
@@ -158,7 +165,7 @@ export default function RiskSummary({
         </span>
 
         <strong>
-          ● 3D-CNN ACTIVE
+          ● 3D-CNN + ViT FUSION ACTIVE
         </strong>
 
       </div>

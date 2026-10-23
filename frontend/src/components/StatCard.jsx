@@ -3,7 +3,7 @@ import React from "react";
 export default function StatCard({
   label,
   value,
-  unit,
+  unit
 }) {
   return (
     <div className="stat-card">

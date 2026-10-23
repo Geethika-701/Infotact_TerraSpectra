@@ -1,24 +1,28 @@
 import React from "react";
 
-export default function SpectralAnalysis() {
-
+export default function SpectralAnalysis({
+  id
+}) {
   const components = [
     {
       name: "PC1",
-      value: 41.8,
+      value: 41.8
     },
     {
       name: "PC2",
-      value: 27.4,
+      value: 27.4
     },
     {
       name: "PC3",
-      value: 18.2,
-    },
+      value: 18.2
+    }
   ];
 
   return (
-    <div className="spectral-card">
+    <div
+      id={id}
+      className="spectral-card"
+    >
 
       <div className="spectral-top">
 
@@ -54,49 +58,50 @@ export default function SpectralAnalysis() {
 
       </div>
 
-
       <div className="pca-bars">
 
-        {components.map((component) => (
+        {components.map(
+          (component) => (
 
-          <div
-            className="pca-row"
-            key={component.name}
-          >
+            <div
+              className="pca-row"
+              key={component.name}
+            >
 
-            <div className="pca-label">
+              <div className="pca-label">
 
-              <strong>
-                {component.name}
-              </strong>
+                <strong>
+                  {component.name}
+                </strong>
 
-              <span>
-                {component.value}%
-              </span>
+                <span>
+                  {component.value}%
+                </span>
+
+              </div>
+
+              <div className="pca-track">
+
+                <div
+                  className={`pca-progress ${component.name.toLowerCase()}`}
+                  style={{
+                    width: `${component.value}%`
+                  }}
+                />
+
+              </div>
 
             </div>
 
-            <div className="pca-track">
-
-              <div
-                className={`pca-progress ${component.name.toLowerCase()}`}
-                style={{
-                  width: `${component.value}%`,
-                }}
-              />
-
-            </div>
-
-          </div>
-
-        ))}
+          )
+        )}
 
       </div>
-
 
       <div className="spectral-bottom">
 
         <div>
+
           <span>
             INPUT
           </span>
@@ -104,9 +109,11 @@ export default function SpectralAnalysis() {
           <strong>
             224 BANDS
           </strong>
+
         </div>
 
         <div>
+
           <span>
             OUTPUT
           </span>
@@ -114,9 +121,11 @@ export default function SpectralAnalysis() {
           <strong>
             3 COMPONENTS
           </strong>
+
         </div>
 
         <div>
+
           <span>
             METHOD
           </span>
@@ -124,6 +133,7 @@ export default function SpectralAnalysis() {
           <strong>
             PCA
           </strong>
+
         </div>
 
       </div>

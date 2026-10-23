@@ -1,7 +1,9 @@
-import React, { useMemo } from "react";
+import React, {
+  useMemo
+} from "react";
+
 import Map from "react-map-gl/mapbox";
 import { DeckGL } from "@deck.gl/react";
-
 import Heatmap from "./Heatmap";
 
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -14,13 +16,12 @@ const INITIAL_VIEW_STATE = {
   latitude: 17.6868,
   zoom: 14,
   pitch: 35,
-  bearing: 0,
+  bearing: 0
 };
 
 export default function FarmMap({
-  predictions = [],
+  predictions = []
 }) {
-
   const layers = useMemo(() => {
 
     if (
@@ -32,12 +33,11 @@ export default function FarmMap({
 
     return [
       Heatmap({
-        predictions,
-      }),
+        predictions
+      })
     ];
 
   }, [predictions]);
-
 
   return (
     <div className="farm-map-container">
@@ -50,7 +50,7 @@ export default function FarmMap({
         layers={layers}
         style={{
           position: "absolute",
-          inset: 0,
+          inset: 0
         }}
       >
 
@@ -63,12 +63,11 @@ export default function FarmMap({
           }
           style={{
             width: "100%",
-            height: "100%",
+            height: "100%"
           }}
         />
 
       </DeckGL>
-
 
       <div className="map-overlay">
 
@@ -82,7 +81,6 @@ export default function FarmMap({
         </div>
 
       </div>
-
 
       <div className="map-legend">
 
@@ -106,7 +104,6 @@ export default function FarmMap({
         </div>
 
       </div>
-
 
       <div className="map-coordinates">
         17.6868° N · 83.2185° E

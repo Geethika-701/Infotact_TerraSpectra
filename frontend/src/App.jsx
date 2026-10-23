@@ -1,5 +1,7 @@
-
-import React, { useEffect, useState } from "react";
+import React, {
+  useEffect,
+  useState
+} from "react";
 
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
@@ -8,91 +10,154 @@ import FarmMap from "./components/FarmMap";
 import RiskSummary from "./components/RiskSummary";
 import SpectralAnalysis from "./components/SpectralAnalysis";
 import Pipeline from "./components/Pipeline";
+import Analytics from "./components/Analytics";
 
 const API_URL =
-  import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+  import.meta.env.VITE_API_URL ||
+  "http://127.0.0.1:5000";
 
 export default function App() {
-  const [predictions, setPredictions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [apiOnline, setApiOnline] = useState(false);
+  const [predictions, setPredictions] =
+    useState([]);
+
+  const [analyticsData, setAnalyticsData] =
+    useState(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [apiOnline, setApiOnline] =
+    useState(false);
 
   useEffect(() => {
-    async function loadPredictions() {
+    async function loadDashboardData() {
       try {
-        const response = await fetch(`${API_URL}/predictions`);
+        setLoading(true);
 
-        if (!response.ok) {
-          throw new Error("Prediction API failed");
+        const predictionsResponse =
+          await fetch(
+            `${API_URL}/predictions/fused`
+          );
+
+        if (!predictionsResponse.ok) {
+          throw new Error(
+            "Fused prediction API failed"
+          );
         }
 
-        const data = await response.json();
+        const predictionsData =
+          await predictionsResponse.json();
 
-        setPredictions(data.predictions || []);
+        setPredictions(
+          predictionsData.predictions || []
+        );
+
         setApiOnline(true);
+
+        try {
+          const analyticsResponse =
+            await fetch(
+              `${API_URL}/analytics`
+            );
+
+          if (analyticsResponse.ok) {
+            const data =
+              await analyticsResponse.json();
+
+            setAnalyticsData(data);
+          }
+        } catch (analyticsError) {
+          console.error(
+            "Analytics API error:",
+            analyticsError
+          );
+        }
       } catch (error) {
-        console.error("Backend connection error:", error);
+        console.error(
+          "Backend connection error:",
+          error
+        );
+
         setApiOnline(false);
+        setPredictions([]);
       } finally {
         setLoading(false);
       }
     }
 
-    loadPredictions();
+    loadDashboardData();
   }, []);
 
-  // -----------------------------
-  // RISK CALCULATIONS
-  // -----------------------------
+  const highRisk =
+    analyticsData?.high_risk?.zones ??
+    predictions.filter(
+      (item) =>
+        Number(item.risk) >= 0.7
+    ).length;
 
-  const highRisk = predictions.filter(
-    (item) => Number(item.risk) >= 0.7
-  ).length;
+  const moderateRisk =
+    analyticsData?.moderate?.zones ??
+    predictions.filter(
+      (item) =>
+        Number(item.risk) >= 0.4 &&
+        Number(item.risk) < 0.7
+    ).length;
 
-  const moderateRisk = predictions.filter(
-    (item) =>
-      Number(item.risk) >= 0.4 &&
-      Number(item.risk) < 0.7
-  ).length;
+  const healthy =
+    analyticsData?.healthy?.zones ??
+    predictions.filter(
+      (item) =>
+        Number(item.risk) < 0.4
+    ).length;
 
-  const healthy = predictions.filter(
-    (item) => Number(item.risk) < 0.4
-  ).length;
-
-  const total = predictions.length;
+  const total =
+    analyticsData?.total_zones ??
+    predictions.length;
 
   const riskPercentage =
-    total > 0
-      ? (((highRisk + moderateRisk) / total) * 100).toFixed(1)
-      : "0.0";
+    analyticsData?.risk_percentage ??
+    (
+      total > 0
+        ? ((highRisk + moderateRisk) /
+            total) *
+          100
+        : 0
+    );
 
   return (
     <div className="app">
 
-      {/* SIDEBAR */}
       <Sidebar />
 
       <main className="main-content">
 
-        {/* HEADER */}
-        <Header />
+        <Header
+          apiOnline={apiOnline}
+        />
 
-        <section className="dashboard">
+        <section
+          id="dashboard-section"
+          className="dashboard"
+        >
 
-          {/* PAGE TITLE */}
           <div className="page-heading">
 
             <div>
+
               <span className="eyebrow">
                 PRECISION AGRICULTURE · AI MONITORING
               </span>
 
-              <h1>Farm Overview</h1>
+              <h1>
+                Farm Overview
+              </h1>
 
               <p>
-                Hyperspectral crop stress detection using
-                spatial-spectral deep learning.
+                Hyperspectral crop stress
+                detection using spatial-spectral
+                deep learning.
               </p>
+
             </div>
 
             <div
@@ -102,6 +167,7 @@ export default function App() {
                   : "backend-status"
               }
             >
+
               <span></span>
 
               {loading
@@ -109,11 +175,11 @@ export default function App() {
                 : apiOnline
                 ? "AI ENGINE ONLINE"
                 : "AI ENGINE OFFLINE"}
+
             </div>
 
           </div>
 
-          {/* KPI CARDS */}
           <div className="stats-grid">
 
             <StatCard
@@ -130,26 +196,37 @@ export default function App() {
 
             <StatCard
               label="MODEL"
-              value="3D-CNN"
-              unit="ACTIVE"
+              value="3D-CNN + ViT"
+              unit="FUSION"
             />
 
             <StatCard
               label="RISK ZONES"
-              value={`${riskPercentage}%`}
+              value={`${Number(
+                riskPercentage
+              ).toFixed(2)}%`}
               unit="DETECTED"
             />
 
           </div>
 
-          {/* MAP */}
-          <section className="map-section">
+          <section
+            id="risk-map-section"
+            className="map-section"
+          >
 
             <div className="section-heading">
 
               <div>
-                <span>WEEK 2 · GEOSPATIAL AI</span>
-                <h2>Satellite Risk Map</h2>
+
+                <span>
+                  GEOSPATIAL AI
+                </span>
+
+                <h2>
+                  Satellite Risk Map
+                </h2>
+
               </div>
 
               <div className="prediction-count">
@@ -168,7 +245,6 @@ export default function App() {
 
           </section>
 
-          {/* ANALYTICS */}
           <div className="dashboard-grid">
 
             <RiskSummary
@@ -177,12 +253,17 @@ export default function App() {
               healthy={healthy}
             />
 
-            <SpectralAnalysis />
+            <SpectralAnalysis
+              id="spectral-section"
+            />
 
           </div>
 
-          {/* PIPELINE */}
           <Pipeline />
+
+          <Analytics
+            id="analytics-section"
+          />
 
         </section>
 
