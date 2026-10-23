@@ -3,22 +3,30 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import numpy as np
 
-from predict import predict_grid
+from backend.predict import predict_grid
 
-from analytics import calculate_analytics
+from backend.fusion_predict import (
+    predict_fused_grid,
+    predict_single_patch,
+    normalize_cube,
+    create_patch
+)
 
-from history import (
+from backend.analytics import (
+    calculate_analytics
+)
+
+from backend.history import (
     load_history,
     save_snapshot,
     create_snapshot
 )
 
-from tiling import (
-    tile_info,
+from backend.tiling import (
     generate_tiles,
-    stitch_predictions
+    stitch_predictions,
+    tile_info
 )
-
 
 CUBE_PATH = (
     "dataset/raw/mock_hyperspectral_cube.npy"
@@ -27,7 +35,7 @@ CUBE_PATH = (
 
 app = FastAPI(
     title="TerraSpectra API",
-    version="2.0.0"
+    version="3.0.0"
 )
 
 
@@ -47,62 +55,77 @@ app.add_middleware(
 )
 
 
-# --------------------------------------------------
+# ==================================================
 # ROOT
-# --------------------------------------------------
+# ==================================================
 
 @app.get("/")
 def root():
 
     return {
 
-        "project": "TerraSpectra",
+        "project":
+            "TerraSpectra",
 
-        "status": "online",
+        "status":
+            "online",
 
-        "version": "2.0.0",
+        "version":
+            "3.0.0",
 
-        "week_1": [
-            "Hyperspectral Processing",
-            "PCA Dimensionality Reduction"
-        ],
+        "weeks": {
 
-        "week_2": [
-            "3D-CNN Classification",
-            "Risk Mapping"
-        ],
+            "week_1": [
+                "Hyperspectral Processing",
+                "PCA Dimensionality Reduction"
+            ],
 
-        "week_3": [
-            "Vision Transformer",
-            "Self Attention",
-            "Analytics"
-        ],
+            "week_2": [
+                "3D-CNN Classification",
+                "Risk Mapping"
+            ],
 
-        "week_4": [
-            "FastAPI",
-            "Image Tiling",
-            "Prediction Stitching",
-            "Historical Timeline"
-        ]
+            "week_3": [
+                "Vision Transformer",
+                "Multi-Head Self-Attention",
+                "Model Fusion",
+                "Analytics"
+            ],
+
+            "week_4": [
+                "FastAPI",
+                "Satellite Tiling",
+                "Overlapping Tiles",
+                "Prediction Stitching",
+                "Historical Timeline"
+            ]
+        }
     }
 
 
-# --------------------------------------------------
+# ==================================================
 # HEALTH
-# --------------------------------------------------
+# ==================================================
 
 @app.get("/health")
 def health():
 
     return {
-        "status": "healthy",
-        "api": "online"
+
+        "status":
+            "healthy",
+
+        "api":
+            "online",
+
+        "models":
+            "3D-CNN + Vision Transformer"
     }
 
 
-# --------------------------------------------------
+# ==================================================
 # EXISTING WEEK 2 PREDICTIONS
-# --------------------------------------------------
+# ==================================================
 
 @app.get("/predictions")
 def predictions():
@@ -110,19 +133,63 @@ def predictions():
     results = predict_grid()
 
     return {
-        "count": len(results),
-        "predictions": results
+
+        "count":
+            len(results),
+
+        "predictions":
+            results,
+
+        "model":
+            "3D-CNN"
     }
 
 
-# --------------------------------------------------
+# ==================================================
+# WEEK 3 FUSED PREDICTIONS
+# ==================================================
+
+@app.get("/predictions/fused")
+def fused_predictions():
+
+    results = predict_fused_grid(
+        stride=2,
+        batch_size=16
+    )
+
+    return {
+
+        "count":
+            len(results),
+
+        "predictions":
+            results,
+
+        "model":
+            "3D-CNN + Vision Transformer",
+
+        "fusion": {
+
+            "cnn_weight":
+                0.60,
+
+            "vit_weight":
+                0.40
+        }
+    }
+
+
+# ==================================================
 # WEEK 3 ANALYTICS
-# --------------------------------------------------
+# ==================================================
 
 @app.get("/analytics")
 def analytics():
 
-    results = predict_grid()
+    results = predict_fused_grid(
+        stride=2,
+        batch_size=16
+    )
 
     data = calculate_analytics(
         results
@@ -131,9 +198,9 @@ def analytics():
     return data
 
 
-# --------------------------------------------------
+# ==================================================
 # MODEL INFORMATION
-# --------------------------------------------------
+# ==================================================
 
 @app.get("/models")
 def models():
@@ -149,27 +216,130 @@ def models():
         "attention":
             "Multi-Head Self-Attention",
 
+        "fusion":
+            "Weighted Probability Fusion",
+
+        "cnn_weight":
+            0.60,
+
+        "vit_weight":
+            0.40,
+
         "spectral_bands":
             224,
+
+        "patch_size":
+            "7x7",
 
         "classification": [
             "Healthy",
             "Chemically Stressed"
         ],
 
-        "fusion_ready":
-            True
+        "status":
+            "implemented"
     }
 
 
-# --------------------------------------------------
-# SPECTRAL / CHEMICAL ANOMALIES
-# --------------------------------------------------
+# ==================================================
+# WEEK 3 MODEL COMPARISON
+# ==================================================
+
+@app.get("/models/comparison")
+def model_comparison():
+
+    results = predict_fused_grid(
+        stride=2,
+        batch_size=16
+    )
+
+    total = len(results)
+
+    cnn_high = 0
+    vit_high = 0
+    fused_high = 0
+
+    for item in results:
+
+        if item["cnn_risk"] >= 0.7:
+            cnn_high += 1
+
+        if item["vit_risk"] >= 0.7:
+            vit_high += 1
+
+        if item["risk"] >= 0.7:
+            fused_high += 1
+
+    return {
+
+        "total_zones":
+            total,
+
+        "cnn": {
+
+            "high_risk_zones":
+                cnn_high,
+
+            "high_risk_percentage":
+                round(
+                    cnn_high /
+                    total *
+                    100,
+                    2
+                )
+                if total else 0
+        },
+
+        "vit": {
+
+            "high_risk_zones":
+                vit_high,
+
+            "high_risk_percentage":
+                round(
+                    vit_high /
+                    total *
+                    100,
+                    2
+                )
+                if total else 0
+        },
+
+        "fusion": {
+
+            "high_risk_zones":
+                fused_high,
+
+            "high_risk_percentage":
+                round(
+                    fused_high /
+                    total *
+                    100,
+                    2
+                )
+                if total else 0
+        },
+
+        "note": (
+            "This endpoint compares prediction "
+            "behavior. It does not represent "
+            "validation accuracy because the "
+            "current dataset is synthetic."
+        )
+    }
+
+
+# ==================================================
+# ANOMALIES
+# ==================================================
 
 @app.get("/anomalies")
 def anomalies():
 
-    results = predict_grid()
+    results = predict_fused_grid(
+        stride=2,
+        batch_size=16
+    )
 
     data = calculate_analytics(
         results
@@ -199,18 +369,17 @@ def anomalies():
             ],
 
         "note": (
-            "Current dataset supports "
-            "chemical stress classification. "
-            "Specific chemical identities "
-            "require chemical-specific "
-            "training labels."
+            "The current dataset identifies "
+            "chemical stress/anomalous zones. "
+            "Specific chemical identities require "
+            "chemical-specific spectral labels."
         )
     }
 
 
-# --------------------------------------------------
+# ==================================================
 # WEEK 4 TILING INFORMATION
-# --------------------------------------------------
+# ==================================================
 
 @app.get("/tiling")
 def tiling():
@@ -219,160 +388,128 @@ def tiling():
         CUBE_PATH
     )
 
-    info = tile_info(
+    return tile_info(
         cube,
         tile_height=16,
         tile_width=16,
         overlap=4
     )
 
-    return info
 
+# ==================================================
+# WEEK 4 REAL TILED MODEL INFERENCE
+# ==================================================
 
-# --------------------------------------------------
-# WEEK 4 TILE PROCESSING DEMO
-# --------------------------------------------------
-
-@app.get("/tiling/process")
-def process_tiles():
+@app.get("/tiling/inference")
+def tiled_inference():
 
     cube = np.load(
         CUBE_PATH
     )
 
+    normalized_cube = normalize_cube(
+        cube
+    )
+
+    height, width, bands = (
+        normalized_cube.shape
+    )
+
     tiles = generate_tiles(
-        cube,
+        normalized_cube,
         tile_height=16,
         tile_width=16,
         overlap=4
     )
 
-    processed_tiles = []
+    stitched_predictions = []
+
+    # Import here to avoid unnecessary model
+    # loading for endpoints that don't require it.
+
+    from fusion_predict import (
+        load_models,
+        create_patch,
+        predict_batch
+    )
+
+    cnn, vit, device = load_models()
 
     for tile in tiles:
 
-        tile_data = tile["data"]
+        y1 = tile["row_start"]
+        y2 = tile["row_end"]
 
-        # Simple spectral statistic for each tile.
-        # This represents the type of processing
-        # that can later be replaced by model inference.
+        x1 = tile["col_start"]
+        x2 = tile["col_end"]
 
-        spectral_mean = float(
-            tile_data.mean()
+        patches = []
+
+        coordinates = []
+
+        for row in range(
+            y1,
+            y2
+        ):
+
+            for col in range(
+                x1,
+                x2
+            ):
+
+                patch = create_patch(
+                    normalized_cube,
+                    row,
+                    col,
+                    7
+                )
+
+                patches.append(
+                    patch
+                )
+
+                coordinates.append(
+                    (row, col)
+                )
+
+        _, _, fused = predict_batch(
+            cnn,
+            vit,
+            device,
+            patches
         )
 
-        processed_tiles.append({
+        prediction = np.asarray(
+            fused,
+            dtype=np.float32
+        ).reshape(
+            y2 - y1,
+            x2 - x1
+        )
+
+        stitched_predictions.append({
 
             "tile_id":
                 tile["tile_id"],
 
             "row_start":
-                tile["row_start"],
+                y1,
 
             "row_end":
-                tile["row_end"],
+                y2,
 
             "col_start":
-                tile["col_start"],
+                x1,
 
             "col_end":
-                tile["col_end"],
-
-            "spectral_mean":
-                round(
-                    spectral_mean,
-                    6
-                )
-        })
-
-    return {
-
-        "image_height":
-            cube.shape[0],
-
-        "image_width":
-            cube.shape[1],
-
-        "bands":
-            cube.shape[2],
-
-        "tiles_processed":
-            len(processed_tiles),
-
-        "tile_size":
-            "16x16",
-
-        "overlap":
-            4,
-
-        "tiles":
-            processed_tiles
-    }
-
-
-# --------------------------------------------------
-# WEEK 4 STITCHING DEMO
-# --------------------------------------------------
-
-@app.get("/tiling/stitch")
-def stitch_demo():
-
-    cube = np.load(
-        CUBE_PATH
-    )
-
-    height = cube.shape[0]
-    width = cube.shape[1]
-
-    tiles = generate_tiles(
-        cube,
-        tile_height=16,
-        tile_width=16,
-        overlap=4
-    )
-
-    tile_predictions = []
-
-    for tile in tiles:
-
-        tile_data = tile["data"]
-
-        # Demo prediction based on spectral mean.
-        # The real model can replace this later.
-
-        spectral_mean = float(
-            tile_data.mean()
-        )
-
-        prediction = np.full(
-            (
-                tile["height"],
-                tile["width"]
-            ),
-            spectral_mean,
-            dtype=np.float32
-        )
-
-        tile_predictions.append({
-
-            "row_start":
-                tile["row_start"],
-
-            "row_end":
-                tile["row_end"],
-
-            "col_start":
-                tile["col_start"],
-
-            "col_end":
-                tile["col_end"],
+                x2,
 
             "prediction":
                 prediction
         })
 
-    stitched = stitch_predictions(
-        tile_predictions,
+    final_prediction = stitch_predictions(
+        stitched_predictions,
         height,
         width
     )
@@ -385,43 +522,55 @@ def stitch_demo():
         "image_width":
             width,
 
-        "tiles":
+        "spectral_bands":
+            bands,
+
+        "tiles_processed":
             len(tiles),
 
-        "stitched_shape":
+        "tile_size":
+            "16x16",
+
+        "overlap":
+            4,
+
+        "model":
+            "3D-CNN + Vision Transformer",
+
+        "stitched_prediction_shape":
             list(
-                stitched.shape
+                final_prediction.shape
             ),
 
-        "min_prediction":
+        "minimum_risk":
             round(
                 float(
-                    stitched.min()
+                    final_prediction.min()
                 ),
-                6
+                4
             ),
 
-        "max_prediction":
+        "maximum_risk":
             round(
                 float(
-                    stitched.max()
+                    final_prediction.max()
                 ),
-                6
+                4
             ),
 
-        "mean_prediction":
+        "mean_risk":
             round(
                 float(
-                    stitched.mean()
+                    final_prediction.mean()
                 ),
-                6
+                4
             )
     }
 
 
-# --------------------------------------------------
+# ==================================================
 # WEEK 4 HISTORY
-# --------------------------------------------------
+# ==================================================
 
 @app.get("/history")
 def history():
@@ -438,21 +587,29 @@ def history():
     }
 
 
-# --------------------------------------------------
-# SAVE CURRENT SNAPSHOT
-# --------------------------------------------------
+# ==================================================
+# SAVE CURRENT FUSED SNAPSHOT
+# ==================================================
 
 @app.post("/history/snapshot")
 def history_snapshot():
 
-    results = predict_grid()
+    results = predict_fused_grid(
+        stride=2,
+        batch_size=16
+    )
 
     analytics_data = calculate_analytics(
         results
     )
 
     snapshot = create_snapshot(
-        analytics_data
+        analytics_data,
+
+        model=(
+            "3D-CNN + "
+            "Vision Transformer"
+        )
     )
 
     saved = save_snapshot(

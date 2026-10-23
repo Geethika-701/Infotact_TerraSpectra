@@ -1,13 +1,26 @@
 import numpy as np
 import torch
 
-from model import TerraSpectra3DCNN
+#from model import TerraSpectra3DCNN
+from backend.model import TerraSpectra3DCNN
 
+import os
 
-CUBE_PATH = "dataset/raw/mock_hyperspectral_cube.npy"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.dirname(BASE_DIR)
 
-MODEL_PATH = "models/terraspectra_3dcnn.pth"
+CUBE_PATH = os.path.join(
+    PROJECT_DIR,
+    "dataset",
+    "raw",
+    "mock_hyperspectral_cube.npy"
+)
 
+MODEL_PATH = os.path.join(
+    BASE_DIR,
+    "models",
+    "terraspectra_3dcnn.pth"
+)
 
 LONGITUDE = 83.2185
 LATITUDE = 17.6868

@@ -7,18 +7,6 @@ def generate_tiles(
     tile_width=16,
     overlap=4
 ):
-    """
-    Split a hyperspectral cube into overlapping tiles.
-
-    Input:
-        cube -> [height, width, bands]
-
-    Example:
-        [64, 64, 224]
-
-    Output:
-        List of overlapping tiles.
-    """
 
     height, width, bands = cube.shape
 
@@ -74,15 +62,33 @@ def generate_tiles(
             ]
 
             tiles.append({
-                "tile_id": tile_id,
-                "row_start": y_start,
-                "row_end": y_end,
-                "col_start": x_start,
-                "col_end": x_end,
-                "height": tile.shape[0],
-                "width": tile.shape[1],
-                "bands": bands,
-                "data": tile
+
+                "tile_id":
+                    tile_id,
+
+                "row_start":
+                    y_start,
+
+                "row_end":
+                    y_end,
+
+                "col_start":
+                    x_start,
+
+                "col_end":
+                    x_end,
+
+                "height":
+                    tile.shape[0],
+
+                "width":
+                    tile.shape[1],
+
+                "bands":
+                    bands,
+
+                "data":
+                    tile
             })
 
             tile_id += 1
@@ -105,12 +111,6 @@ def stitch_predictions(
     height,
     width
 ):
-    """
-    Stitch overlapping tile predictions.
-
-    When multiple tiles cover the same pixel,
-    their predictions are averaged.
-    """
 
     prediction_sum = np.zeros(
         (height, width),
@@ -135,6 +135,19 @@ def stitch_predictions(
             dtype=np.float32
         )
 
+        expected_shape = (
+            y2 - y1,
+            x2 - x1
+        )
+
+        if prediction.shape != expected_shape:
+
+            raise ValueError(
+                f"Prediction shape {prediction.shape} "
+                f"does not match tile shape "
+                f"{expected_shape}"
+            )
+
         prediction_sum[
             y1:y2,
             x1:x2
@@ -149,12 +162,10 @@ def stitch_predictions(
         prediction_count == 0
     ] = 1
 
-    final_prediction = (
+    return (
         prediction_sum /
         prediction_count
     )
-
-    return final_prediction
 
 
 def tile_info(
@@ -163,9 +174,6 @@ def tile_info(
     tile_width=16,
     overlap=4
 ):
-    """
-    Return metadata about the tiling configuration.
-    """
 
     height, width, bands = cube.shape
 
@@ -177,13 +185,31 @@ def tile_info(
     )
 
     return {
-        "image_height": height,
-        "image_width": width,
-        "spectral_bands": bands,
-        "tile_height": tile_height,
-        "tile_width": tile_width,
-        "overlap": overlap,
-        "step_height": tile_height - overlap,
-        "step_width": tile_width - overlap,
-        "number_of_tiles": len(tiles)
+
+        "image_height":
+            height,
+
+        "image_width":
+            width,
+
+        "spectral_bands":
+            bands,
+
+        "tile_height":
+            tile_height,
+
+        "tile_width":
+            tile_width,
+
+        "overlap":
+            overlap,
+
+        "step_height":
+            tile_height - overlap,
+
+        "step_width":
+            tile_width - overlap,
+
+        "number_of_tiles":
+            len(tiles)
     }
