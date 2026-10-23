@@ -1,6 +1,6 @@
 [
   {
-    "timestamp": "2026-10-19T22:16:42.044532",
+    "timestamp": "2026-10-19T22:48:02.224926",
     "label": "Baseline Scan",
     "model": "3D-CNN + Vision Transformer",
     "risk_percentage": 8.4,
@@ -12,7 +12,7 @@
     "temporal_note": "Reconstructed temporal demonstration generated from the current synthetic dataset; not historical satellite imagery."
   },
   {
-    "timestamp": "2026-10-20T22:16:42.044532",
+    "timestamp": "2026-10-20T22:48:02.224926",
     "label": "Early Stress Signal",
     "model": "3D-CNN + Vision Transformer",
     "risk_percentage": 10.1,
@@ -24,7 +24,7 @@
     "temporal_note": "Reconstructed temporal demonstration generated from the current synthetic dataset; not historical satellite imagery."
   },
   {
-    "timestamp": "2026-10-21T22:16:42.044532",
+    "timestamp": "2026-10-21T22:48:02.224926",
     "label": "Progressive Stress",
     "model": "3D-CNN + Vision Transformer",
     "risk_percentage": 11.8,
@@ -36,7 +36,7 @@
     "temporal_note": "Reconstructed temporal demonstration generated from the current synthetic dataset; not historical satellite imagery."
   },
   {
-    "timestamp": "2026-10-22T22:16:42.044532",
+    "timestamp": "2026-10-22T22:48:02.224926",
     "label": "Elevated Monitoring",
     "model": "3D-CNN + Vision Transformer",
     "risk_percentage": 13.2,
@@ -48,7 +48,7 @@
     "temporal_note": "Reconstructed temporal demonstration generated from the current synthetic dataset; not historical satellite imagery."
   },
   {
-    "timestamp": "2026-10-23T22:16:42.044532",
+    "timestamp": "2026-10-23T22:48:02.224926",
     "label": "Current Scan",
     "model": "3D-CNN + Vision Transformer",
     "risk_percentage": 14.06,

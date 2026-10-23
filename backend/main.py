@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import os
 import numpy as np
 
 from backend.predict import predict_grid
@@ -26,6 +27,15 @@ from backend.tiling import (
     generate_tiles,
     stitch_predictions,
     tile_info
+)
+
+from backend.rasterio_ingestion import (
+    rasterio_summary,
+    create_mock_geotiff
+)
+
+from backend.pca_processing import (
+    pca_summary
 )
 
 
@@ -78,6 +88,7 @@ def root():
 
             "week_1": [
                 "Hyperspectral Processing",
+                "Rasterio GeoTIFF Ingestion",
                 "PCA Dimensionality Reduction"
             ],
 
@@ -122,6 +133,52 @@ def health():
         "models":
             "3D-CNN + Vision Transformer"
     }
+
+
+# ==================================================
+# WEEK 1 RASTERIO INGESTION
+# ==================================================
+
+@app.get("/rasterio")
+def rasterio_endpoint():
+
+    return rasterio_summary()
+
+
+# ==================================================
+# CREATE MOCK HYPERSPECTRAL GEOTIFF
+# ==================================================
+
+@app.post("/rasterio/create-geotiff")
+def create_geotiff_endpoint():
+
+    path = create_mock_geotiff()
+
+    return {
+
+        "status":
+            "created",
+
+        "file":
+            os.path.basename(path),
+
+        "message": (
+            "Synthetic hyperspectral "
+            "GeoTIFF created successfully."
+        )
+    }
+
+
+# ==================================================
+# WEEK 1 PCA
+# ==================================================
+
+@app.get("/pca")
+def pca_endpoint():
+
+    return pca_summary(
+        components=3
+    )
 
 
 # ==================================================
@@ -692,7 +749,9 @@ def create_demo_history():
             {}
         ).get(
             "zones",
-            total_zones - current_high - current_moderate
+            total_zones -
+            current_high -
+            current_moderate
         )
     )
 
@@ -723,10 +782,22 @@ def create_demo_history():
     ]
 
     healthy_values = [
-        total_zones - high_values[0] - moderate_values[0],
-        total_zones - high_values[1] - moderate_values[1],
-        total_zones - high_values[2] - moderate_values[2],
-        total_zones - high_values[3] - moderate_values[3],
+        total_zones -
+        high_values[0] -
+        moderate_values[0],
+
+        total_zones -
+        high_values[1] -
+        moderate_values[1],
+
+        total_zones -
+        high_values[2] -
+        moderate_values[2],
+
+        total_zones -
+        high_values[3] -
+        moderate_values[3],
+
         current_healthy
     ]
 
@@ -745,8 +816,11 @@ def create_demo_history():
         risk = risk_values[index]
 
         if index == 4:
+
             acres = current_acres
+
         else:
+
             acres = (
                 risk /
                 100.0 *
@@ -807,13 +881,16 @@ def create_demo_history():
             snapshot
         )
 
-    history_file = "dataset/history.json"
+    history_file = (
+        "dataset/history.json"
+    )
 
-    import os
     import json
 
     os.makedirs(
-        os.path.dirname(history_file),
+        os.path.dirname(
+            history_file
+        ),
         exist_ok=True
     )
 
@@ -835,7 +912,9 @@ def create_demo_history():
             "demo_history_created",
 
         "count":
-            len(reconstructed_history),
+            len(
+                reconstructed_history
+            ),
 
         "history":
             reconstructed_history,
