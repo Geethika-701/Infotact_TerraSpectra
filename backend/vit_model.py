@@ -4,129 +4,107 @@ import torch.nn as nn
 
 class SpectralPatchEmbedding(nn.Module):
     """
-    Converts a hyperspectral spatial-spectral patch into
-    a sequence of spectral tokens.
+    Converts a 7x7 spatial neighborhood containing 16
+    spectral bands into a 128-dimensional token.
+
+    Input per token:
+        7 x 7 x 16 = 784 features
+
+    Output:
+        128-dimensional embedding
+    """
+
+    def __init__(
+        self,
+        input_features=784,
+        embed_dim=128
+    ):
+        super().__init__()
+
+        self.projection = nn.Linear(
+            input_features,
+            embed_dim
+        )
+
+    def forward(self, x):
+        return self.projection(x)
+
+
+class TerraSpectraViT(nn.Module):
+    """
+    TerraSpectra Vision Transformer.
 
     Input:
-        [batch, 1, bands, height, width]
+        [batch, 7, 7, 224]
 
-    Example:
-        [16, 1, 224, 7, 7]
-
-    224 bands are divided into spectral groups.
+    Processing:
+        224 spectral bands
+             ↓
+        14 spectral groups
+             ↓
+        7x7x16 = 784 features per token
+             ↓
+        128-dimensional embeddings
+             ↓
+        Multi-head self-attention
+             ↓
+        Transformer encoder
+             ↓
+        Healthy / Chemically Stressed
     """
 
     def __init__(
         self,
         bands=224,
-        patch_size=7,
         spectral_group_size=16,
-        embedding_dim=128
-    ):
-        super().__init__()
-
-        self.bands = bands
-        self.patch_size = patch_size
-        self.spectral_group_size = spectral_group_size
-
-        self.num_tokens = bands // spectral_group_size
-
-        input_features = (
-            spectral_group_size
-            * patch_size
-            * patch_size
-        )
-
-        self.projection = nn.Linear(
-            input_features,
-            embedding_dim
-        )
-
-    def forward(self, x):
-
-        batch_size = x.shape[0]
-
-        # [B, 1, Bands, H, W]
-        x = x.squeeze(1)
-
-        tokens = []
-
-        for start in range(
-            0,
-            self.bands,
-            self.spectral_group_size
-        ):
-
-            end = start + self.spectral_group_size
-
-            spectral_group = x[
-                :,
-                start:end,
-                :,
-                :
-            ]
-
-            spectral_group = spectral_group.reshape(
-                batch_size,
-                -1
-            )
-
-            token = self.projection(
-                spectral_group
-            )
-
-            tokens.append(token)
-
-        tokens = torch.stack(
-            tokens,
-            dim=1
-        )
-
-        return tokens
-
-
-class TerraSpectraViT(nn.Module):
-
-    def __init__(
-        self,
-        bands=224,
-        patch_size=7,
-        spectral_group_size=16,
-        embedding_dim=128,
+        embed_dim=128,
         num_heads=8,
         num_layers=4,
         num_classes=2
     ):
-
         super().__init__()
 
-        self.patch_embedding = SpectralPatchEmbedding(
-            bands=bands,
-            patch_size=patch_size,
-            spectral_group_size=spectral_group_size,
-            embedding_dim=embedding_dim
-        )
+        self.bands = bands
+        self.spectral_group_size = spectral_group_size
+        self.embed_dim = embed_dim
 
-        num_tokens = (
+        if bands % spectral_group_size != 0:
+            raise ValueError(
+                "Number of spectral bands must be divisible "
+                "by spectral_group_size."
+            )
+
+        self.num_tokens = (
             bands // spectral_group_size
         )
 
+        self.patch_embedding = SpectralPatchEmbedding(
+            input_features=(
+                7 * 7 * spectral_group_size
+            ),
+            embed_dim=embed_dim
+        )
+
         self.class_token = nn.Parameter(
-            torch.zeros(1, 1, embedding_dim)
+            torch.zeros(
+                1,
+                1,
+                embed_dim
+            )
         )
 
         self.position_embedding = nn.Parameter(
             torch.zeros(
                 1,
-                num_tokens + 1,
-                embedding_dim
+                self.num_tokens + 1,
+                embed_dim
             )
         )
 
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=embedding_dim,
+            d_model=embed_dim,
             nhead=num_heads,
-            dim_feedforward=embedding_dim * 4,
+            dim_feedforward=embed_dim * 4,
             dropout=0.1,
             activation="gelu",
             batch_first=True,
@@ -139,15 +117,15 @@ class TerraSpectraViT(nn.Module):
         )
 
         self.norm = nn.LayerNorm(
-            embedding_dim
+            embed_dim
         )
 
         self.classifier = nn.Sequential(
             nn.Linear(
-                embedding_dim,
+                embed_dim,
                 64
             ),
-            nn.GELU(),
+            nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(
                 64,
@@ -155,11 +133,142 @@ class TerraSpectraViT(nn.Module):
             )
         )
 
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+
+        nn.init.trunc_normal_(
+            self.class_token,
+            std=0.02
+        )
+
+        nn.init.trunc_normal_(
+            self.position_embedding,
+            std=0.02
+        )
+
+        nn.init.xavier_uniform_(
+            self.patch_embedding.projection.weight
+        )
+
+        if (
+            self.patch_embedding.projection.bias
+            is not None
+        ):
+            nn.init.zeros_(
+                self.patch_embedding.projection.bias
+            )
+
     def forward(self, x):
 
-        tokens = self.patch_embedding(x)
+        if x.ndim != 4:
+            raise ValueError(
+                "TerraSpectraViT expects input "
+                "with shape [batch, 7, 7, 224]. "
+                f"Received {tuple(x.shape)}"
+            )
 
-        batch_size = tokens.shape[0]
+        batch_size = x.shape[0]
+        height = x.shape[1]
+        width = x.shape[2]
+        bands = x.shape[3]
+
+        if height != 7 or width != 7:
+            raise ValueError(
+                "TerraSpectraViT expects 7x7 "
+                "spatial patches. "
+                f"Received {height}x{width}."
+            )
+
+        if bands != self.bands:
+            raise ValueError(
+                f"TerraSpectraViT expects "
+                f"{self.bands} spectral bands. "
+                f"Received {bands}."
+            )
+
+        # -------------------------------------------------
+        # Step 1
+        # Split 224 spectral bands into 14 groups.
+        #
+        # 224 / 16 = 14
+        #
+        # [B, 7, 7, 224]
+        #
+        # becomes
+        #
+        # [B, 7, 7, 14, 16]
+        # -------------------------------------------------
+
+        x = x.reshape(
+            batch_size,
+            height,
+            width,
+            self.num_tokens,
+            self.spectral_group_size
+        )
+
+        # -------------------------------------------------
+        # Step 2
+        # Move spectral tokens before spatial dimensions.
+        #
+        # [B, 7, 7, 14, 16]
+        #
+        # becomes
+        #
+        # [B, 14, 7, 7, 16]
+        # -------------------------------------------------
+
+        x = x.permute(
+            0,
+            3,
+            1,
+            2,
+            4
+        )
+
+        # -------------------------------------------------
+        # Step 3
+        # Flatten each spectral token.
+        #
+        # 7 x 7 x 16 = 784
+        #
+        # [B, 14, 7, 7, 16]
+        #
+        # becomes
+        #
+        # [B, 14, 784]
+        # -------------------------------------------------
+
+        x = x.reshape(
+            batch_size,
+            self.num_tokens,
+            7 * 7 * self.spectral_group_size
+        )
+
+        # -------------------------------------------------
+        # Step 4
+        # Spectral patch embedding.
+        #
+        # [B, 14, 784]
+        #
+        # becomes
+        #
+        # [B, 14, 128]
+        # -------------------------------------------------
+
+        x = self.patch_embedding(x)
+
+        # -------------------------------------------------
+        # Step 5
+        # Add classification token.
+        #
+        # [B, 14, 128]
+        #
+        # becomes
+        #
+        # [B, 15, 128]
+        # -------------------------------------------------
 
         class_token = self.class_token.expand(
             batch_size,
@@ -167,26 +276,50 @@ class TerraSpectraViT(nn.Module):
             -1
         )
 
-        tokens = torch.cat(
-            [class_token, tokens],
+        x = torch.cat(
+            [
+                class_token,
+                x
+            ],
             dim=1
         )
 
-        tokens = (
-            tokens
-            + self.position_embedding[:, :tokens.shape[1], :]
+        # -------------------------------------------------
+        # Step 6
+        # Add positional embeddings.
+        # -------------------------------------------------
+
+        x = (
+            x +
+            self.position_embedding
         )
 
-        encoded = self.transformer(
-            tokens
-        )
+        # -------------------------------------------------
+        # Step 7
+        # Multi-head self-attention.
+        # -------------------------------------------------
 
-        representation = self.norm(
-            encoded[:, 0]
-        )
+        x = self.transformer(x)
 
-        output = self.classifier(
-            representation
-        )
+        # -------------------------------------------------
+        # Step 8
+        # Normalize transformer representation.
+        # -------------------------------------------------
 
-        return output
+        x = self.norm(x)
+
+        # -------------------------------------------------
+        # Step 9
+        # Take classification token.
+        # -------------------------------------------------
+
+        x = x[:, 0]
+
+        # -------------------------------------------------
+        # Step 10
+        # Binary classification.
+        # -------------------------------------------------
+
+        x = self.classifier(x)
+
+        return x

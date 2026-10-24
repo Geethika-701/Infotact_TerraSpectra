@@ -1,7 +1,11 @@
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import os
+import json
+from datetime import datetime, timedelta
+
 import numpy as np
 
 from backend.predict import predict_grid
@@ -10,7 +14,9 @@ from backend.fusion_predict import (
     predict_fused_grid,
     predict_single_patch,
     normalize_cube,
-    create_patch
+    create_patch,
+    load_models,
+    predict_batch
 )
 
 from backend.analytics import (
@@ -20,7 +26,8 @@ from backend.analytics import (
 from backend.history import (
     load_history,
     save_snapshot,
-    create_snapshot
+    create_snapshot,
+    get_progression
 )
 
 from backend.tiling import (
@@ -38,17 +45,54 @@ from backend.pca_processing import (
     pca_summary
 )
 
-
-CUBE_PATH = (
-    "dataset/raw/mock_hyperspectral_cube.npy"
+from backend.memory_audit import (
+    run_memory_audit
 )
 
+from backend.validation import (
+    validate_models
+)
+
+
+# =========================================================
+# PATHS
+# =========================================================
+
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
+PROJECT_DIR = os.path.dirname(
+    BASE_DIR
+)
+
+CUBE_PATH = os.path.join(
+    PROJECT_DIR,
+    "dataset",
+    "raw",
+    "mock_hyperspectral_cube.npy"
+)
+
+HISTORY_FILE = os.path.join(
+    PROJECT_DIR,
+    "dataset",
+    "history.json"
+)
+
+
+# =========================================================
+# FASTAPI APPLICATION
+# =========================================================
 
 app = FastAPI(
     title="TerraSpectra API",
-    version="4.0.0"
+    version="4.1.0"
 )
 
+
+# =========================================================
+# CORS
+# =========================================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -66,9 +110,9 @@ app.add_middleware(
 )
 
 
-# ==================================================
+# =========================================================
 # ROOT
-# ==================================================
+# =========================================================
 
 @app.get("/")
 def root():
@@ -82,7 +126,7 @@ def root():
             "online",
 
         "version":
-            "4.0.0",
+            "4.1.0",
 
         "weeks": {
 
@@ -94,14 +138,17 @@ def root():
 
             "week_2": [
                 "3D-CNN Classification",
-                "Risk Mapping"
+                "Risk Mapping",
+                "Memory Conscious Processing",
+                "GIS Validation"
             ],
 
             "week_3": [
                 "Vision Transformer",
                 "Multi-Head Self-Attention",
-                "Model Fusion",
-                "Analytics"
+                "CNN + ViT Model Fusion",
+                "Analytics",
+                "Model Validation"
             ],
 
             "week_4": [
@@ -109,15 +156,16 @@ def root():
                 "Satellite Tiling",
                 "Overlapping Tiles",
                 "Prediction Stitching",
-                "Historical Timeline"
+                "Historical Timeline",
+                "Temporal Progression Analysis"
             ]
         }
     }
 
 
-# ==================================================
+# =========================================================
 # HEALTH
-# ==================================================
+# =========================================================
 
 @app.get("/health")
 def health():
@@ -135,9 +183,10 @@ def health():
     }
 
 
-# ==================================================
-# WEEK 1 RASTERIO INGESTION
-# ==================================================
+# =========================================================
+# WEEK 1
+# RASTERIO HYPERSPECTRAL INGESTION
+# =========================================================
 
 @app.get("/rasterio")
 def rasterio_endpoint():
@@ -145,9 +194,9 @@ def rasterio_endpoint():
     return rasterio_summary()
 
 
-# ==================================================
+# =========================================================
 # CREATE MOCK HYPERSPECTRAL GEOTIFF
-# ==================================================
+# =========================================================
 
 @app.post("/rasterio/create-geotiff")
 def create_geotiff_endpoint():
@@ -169,9 +218,10 @@ def create_geotiff_endpoint():
     }
 
 
-# ==================================================
-# WEEK 1 PCA
-# ==================================================
+# =========================================================
+# WEEK 1
+# PCA DIMENSIONALITY REDUCTION
+# =========================================================
 
 @app.get("/pca")
 def pca_endpoint():
@@ -181,9 +231,10 @@ def pca_endpoint():
     )
 
 
-# ==================================================
-# EXISTING WEEK 2 PREDICTIONS
-# ==================================================
+# =========================================================
+# WEEK 2
+# ORIGINAL 3D-CNN PREDICTIONS
+# =========================================================
 
 @app.get("/predictions")
 def predictions():
@@ -203,9 +254,10 @@ def predictions():
     }
 
 
-# ==================================================
-# WEEK 3 FUSED PREDICTIONS
-# ==================================================
+# =========================================================
+# WEEK 3
+# FUSED 3D-CNN + VISION TRANSFORMER PREDICTIONS
+# =========================================================
 
 @app.get("/predictions/fused")
 def fused_predictions():
@@ -228,6 +280,9 @@ def fused_predictions():
 
         "fusion": {
 
+            "enabled":
+                True,
+
             "cnn_weight":
                 0.60,
 
@@ -237,9 +292,10 @@ def fused_predictions():
     }
 
 
-# ==================================================
-# WEEK 3 ANALYTICS
-# ==================================================
+# =========================================================
+# WEEK 3
+# ANALYTICS
+# =========================================================
 
 @app.get("/analytics")
 def analytics():
@@ -256,9 +312,9 @@ def analytics():
     return data
 
 
-# ==================================================
+# =========================================================
 # MODEL INFORMATION
-# ==================================================
+# =========================================================
 
 @app.get("/models")
 def models():
@@ -299,9 +355,10 @@ def models():
     }
 
 
-# ==================================================
-# WEEK 3 MODEL COMPARISON
-# ==================================================
+# =========================================================
+# WEEK 3
+# MODEL BEHAVIOR COMPARISON
+# =========================================================
 
 @app.get("/models/comparison")
 def model_comparison():
@@ -319,16 +376,63 @@ def model_comparison():
 
     for item in results:
 
-        if item["cnn_risk"] >= 0.7:
+        if float(
+            item.get(
+                "cnn_risk",
+                0
+            )
+        ) >= 0.7:
+
             cnn_high += 1
 
-        if item["vit_risk"] >= 0.7:
+        if float(
+            item.get(
+                "vit_risk",
+                0
+            )
+        ) >= 0.7:
+
             vit_high += 1
 
-        if item["risk"] >= 0.7:
+        if float(
+            item.get(
+                "risk",
+                0
+            )
+        ) >= 0.7:
+
             fused_high += 1
 
+    if total > 0:
+
+        cnn_percentage = (
+            cnn_high /
+            total *
+            100
+        )
+
+        vit_percentage = (
+            vit_high /
+            total *
+            100
+        )
+
+        fusion_percentage = (
+            fused_high /
+            total *
+            100
+        )
+
+    else:
+
+        cnn_percentage = 0
+        vit_percentage = 0
+        fusion_percentage = 0
+
     return {
+
+        "status":
+            "success",
 
         "total_zones":
             total,
@@ -340,12 +444,9 @@ def model_comparison():
 
             "high_risk_percentage":
                 round(
-                    cnn_high /
-                    total *
-                    100,
+                    cnn_percentage,
                     2
                 )
-                if total else 0
         },
 
         "vit": {
@@ -355,12 +456,9 @@ def model_comparison():
 
             "high_risk_percentage":
                 round(
-                    vit_high /
-                    total *
-                    100,
+                    vit_percentage,
                     2
                 )
-                if total else 0
         },
 
         "fusion": {
@@ -370,26 +468,51 @@ def model_comparison():
 
             "high_risk_percentage":
                 round(
-                    fused_high /
-                    total *
-                    100,
+                    fusion_percentage,
                     2
                 )
-                if total else 0
         },
 
         "note": (
             "This endpoint compares prediction "
-            "behavior. It does not represent "
-            "validation accuracy because the "
-            "current dataset is synthetic."
+            "behavior. For actual accuracy, precision, "
+            "recall and F1 validation, use /validation."
         )
     }
 
 
-# ==================================================
-# ANOMALIES
-# ==================================================
+# =========================================================
+# WEEK 3
+# ACTUAL MODEL VALIDATION
+# =========================================================
+
+@app.get("/validation")
+def model_validation():
+
+    try:
+
+        results = validate_models(
+            sample_limit=1000,
+            batch_size=32
+        )
+
+        return results
+
+    except Exception as error:
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(error)
+        }
+
+
+# =========================================================
+# ANOMALY ANALYSIS
+# =========================================================
 
 @app.get("/anomalies")
 def anomalies():
@@ -435,12 +558,52 @@ def anomalies():
     }
 
 
-# ==================================================
-# WEEK 4 TILING INFORMATION
-# ==================================================
+# =========================================================
+# WEEK 2
+# MEMORY HANDLING AUDIT
+# =========================================================
+
+@app.get("/memory-audit")
+def memory_audit():
+
+    try:
+
+        result = run_memory_audit()
+
+        return result
+
+    except Exception as error:
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(error)
+        }
+
+
+# =========================================================
+# WEEK 4
+# TILING INFORMATION
+# =========================================================
 
 @app.get("/tiling")
 def tiling():
+
+    if not os.path.exists(
+        CUBE_PATH
+    ):
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                "Hyperspectral cube not found."
+        }
 
     cube = np.load(
         CUBE_PATH
@@ -454,12 +617,26 @@ def tiling():
     )
 
 
-# ==================================================
-# WEEK 4 REAL TILED MODEL INFERENCE
-# ==================================================
+# =========================================================
+# WEEK 4
+# REAL TILED MODEL INFERENCE
+# =========================================================
 
 @app.get("/tiling/inference")
 def tiled_inference():
+
+    if not os.path.exists(
+        CUBE_PATH
+    ):
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                "Hyperspectral cube not found."
+        }
 
     cube = np.load(
         CUBE_PATH
@@ -469,9 +646,9 @@ def tiled_inference():
         cube
     )
 
-    height, width, bands = (
-        normalized_cube.shape
-    )
+    height = normalized_cube.shape[0]
+    width = normalized_cube.shape[1]
+    bands = normalized_cube.shape[2]
 
     tiles = generate_tiles(
         normalized_cube,
@@ -481,12 +658,6 @@ def tiled_inference():
     )
 
     stitched_predictions = []
-
-    from backend.fusion_predict import (
-        load_models,
-        create_patch,
-        predict_batch
-    )
 
     cnn, vit, device = load_models()
 
@@ -499,8 +670,6 @@ def tiled_inference():
         x2 = tile["col_end"]
 
         patches = []
-
-        coordinates = []
 
         for row in range(
             y1,
@@ -523,9 +692,9 @@ def tiled_inference():
                     patch
                 )
 
-                coordinates.append(
-                    (row, col)
-                )
+        if len(patches) == 0:
+
+            continue
 
         _, _, fused = predict_batch(
             cnn,
@@ -570,6 +739,9 @@ def tiled_inference():
     )
 
     return {
+
+        "status":
+            "success",
 
         "image_height":
             height,
@@ -623,310 +795,394 @@ def tiled_inference():
     }
 
 
-# ==================================================
-# WEEK 4 HISTORY
-# ==================================================
+# =========================================================
+# WEEK 4
+# HISTORICAL TIMELINE
+# =========================================================
 
 @app.get("/history")
 def history():
 
-    records = load_history()
+    try:
 
-    return {
+        records = get_progression()
 
-        "count":
-            len(records),
+        return {
 
-        "history":
-            records
-    }
+            "status":
+                "success",
+
+            "count":
+                len(records),
+
+            "history":
+                records
+        }
+
+    except Exception as error:
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(error)
+        }
 
 
-# ==================================================
+# =========================================================
+# HISTORICAL PROGRESSION
+# =========================================================
+
+@app.get("/history/progression")
+def history_progression():
+
+    try:
+
+        records = get_progression()
+
+        return {
+
+            "status":
+                "success",
+
+            "count":
+                len(records),
+
+            "history":
+                records,
+
+            "progression_available":
+                len(records) > 1
+        }
+
+    except Exception as error:
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(error)
+        }
+
+
+# =========================================================
 # SAVE CURRENT FUSED SNAPSHOT
-# ==================================================
+# =========================================================
 
 @app.post("/history/snapshot")
 def history_snapshot():
 
-    results = predict_fused_grid(
-        stride=2,
-        batch_size=16
-    )
+    try:
 
-    analytics_data = calculate_analytics(
-        results
-    )
-
-    snapshot = create_snapshot(
-        analytics_data,
-
-        model=(
-            "3D-CNN + "
-            "Vision Transformer"
+        results = predict_fused_grid(
+            stride=2,
+            batch_size=16
         )
-    )
 
-    saved = save_snapshot(
-        snapshot
-    )
+        analytics_data = calculate_analytics(
+            results
+        )
 
-    return {
+        snapshot = create_snapshot(
+            analytics_data,
 
-        "status":
-            "saved",
+            model=(
+                "3D-CNN + "
+                "Vision Transformer"
+            ),
 
-        "snapshot":
-            saved
-    }
+            data_type="live_scan"
+        )
+
+        saved = save_snapshot(
+            snapshot
+        )
+
+        return {
+
+            "status":
+                "saved",
+
+            "snapshot":
+                saved
+        }
+
+    except Exception as error:
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(error)
+        }
 
 
-# ==================================================
-# WEEK 4 RECONSTRUCTED TEMPORAL DEMONSTRATION
-# ==================================================
+# =========================================================
+# RECONSTRUCTED TEMPORAL DEMONSTRATION
+# =========================================================
 
 @app.post("/history/demo")
 def create_demo_history():
 
-    from datetime import (
-        datetime,
-        timedelta
-    )
+    try:
 
-    results = predict_fused_grid(
-        stride=2,
-        batch_size=16
-    )
-
-    analytics_data = calculate_analytics(
-        results
-    )
-
-    total_zones = int(
-        analytics_data.get(
-            "total_zones",
-            len(results)
+        results = predict_fused_grid(
+            stride=2,
+            batch_size=16
         )
-    )
 
-    current_risk = float(
-        analytics_data.get(
-            "risk_percentage",
-            14.06
+        analytics_data = calculate_analytics(
+            results
         )
-    )
 
-    current_acres = float(
-        analytics_data.get(
-            "risk_acres_estimated",
-            current_risk / 100.0 * 1000.0
+        total_zones = int(
+            analytics_data.get(
+                "total_zones",
+                len(results)
+            )
         )
-    )
 
-    current_high = int(
-        analytics_data.get(
-            "high_risk",
-            {}
-        ).get(
-            "zones",
-            144
+        current_risk = float(
+            analytics_data.get(
+                "risk_percentage",
+                14.06
+            )
         )
-    )
 
-    current_moderate = int(
-        analytics_data.get(
-            "moderate",
-            {}
-        ).get(
-            "zones",
-            0
-        )
-    )
-
-    current_healthy = int(
-        analytics_data.get(
-            "healthy",
-            {}
-        ).get(
-            "zones",
-            total_zones -
-            current_high -
-            current_moderate
-        )
-    )
-
-    now = datetime.now()
-
-    risk_values = [
-        8.40,
-        10.10,
-        11.80,
-        13.20,
-        current_risk
-    ]
-
-    high_values = [
-        86,
-        103,
-        121,
-        135,
-        current_high
-    ]
-
-    moderate_values = [
-        0,
-        0,
-        0,
-        0,
-        current_moderate
-    ]
-
-    healthy_values = [
-        total_zones -
-        high_values[0] -
-        moderate_values[0],
-
-        total_zones -
-        high_values[1] -
-        moderate_values[1],
-
-        total_zones -
-        high_values[2] -
-        moderate_values[2],
-
-        total_zones -
-        high_values[3] -
-        moderate_values[3],
-
-        current_healthy
-    ]
-
-    labels = [
-        "Baseline Scan",
-        "Early Stress Signal",
-        "Progressive Stress",
-        "Elevated Monitoring",
-        "Current Scan"
-    ]
-
-    reconstructed_history = []
-
-    for index in range(5):
-
-        risk = risk_values[index]
-
-        if index == 4:
-
-            acres = current_acres
-
-        else:
-
-            acres = (
-                risk /
+        current_acres = float(
+            analytics_data.get(
+                "risk_acres_estimated",
+                current_risk /
                 100.0 *
                 1000.0
             )
+        )
 
-        timestamp = (
-            now -
-            timedelta(
-                days=4 - index
+        current_high = int(
+            analytics_data.get(
+                "high_risk",
+                {}
+            ).get(
+                "zones",
+                144
             )
         )
 
-        snapshot = {
+        current_moderate = int(
+            analytics_data.get(
+                "moderate",
+                {}
+            ).get(
+                "zones",
+                0
+            )
+        )
 
-            "timestamp":
-                timestamp.isoformat(),
+        current_healthy = int(
+            analytics_data.get(
+                "healthy",
+                {}
+            ).get(
+                "zones",
+                total_zones -
+                current_high -
+                current_moderate
+            )
+        )
 
-            "label":
-                labels[index],
+        now = datetime.now()
 
-            "model":
-                "3D-CNN + Vision Transformer",
+        risk_values = [
+            8.40,
+            10.10,
+            11.80,
+            13.20,
+            current_risk
+        ]
 
-            "risk_percentage":
-                round(
-                    risk,
-                    2
-                ),
+        high_values = [
+            86,
+            103,
+            121,
+            135,
+            current_high
+        ]
 
-            "risk_acres_estimated":
-                round(
-                    acres,
-                    2
-                ),
+        moderate_values = [
+            0,
+            0,
+            0,
+            0,
+            current_moderate
+        ]
 
-            "high_risk_zones":
-                high_values[index],
+        healthy_values = [
 
-            "moderate_zones":
-                moderate_values[index],
+            total_zones -
+            high_values[0] -
+            moderate_values[0],
 
-            "healthy_zones":
-                healthy_values[index],
+            total_zones -
+            high_values[1] -
+            moderate_values[1],
+
+            total_zones -
+            high_values[2] -
+            moderate_values[2],
+
+            total_zones -
+            high_values[3] -
+            moderate_values[3],
+
+            current_healthy
+        ]
+
+        labels = [
+
+            "Baseline Scan",
+
+            "Early Stress Signal",
+
+            "Progressive Stress",
+
+            "Elevated Monitoring",
+
+            "Current Scan"
+        ]
+
+        reconstructed_history = []
+
+        for index in range(5):
+
+            risk = risk_values[index]
+
+            if index == 4:
+
+                acres = current_acres
+
+            else:
+
+                acres = (
+                    risk /
+                    100.0 *
+                    1000.0
+                )
+
+            timestamp = (
+                now -
+                timedelta(
+                    days=4 - index
+                )
+            )
+
+            snapshot = {
+
+                "timestamp":
+                    timestamp.isoformat(),
+
+                "label":
+                    labels[index],
+
+                "model":
+                    "3D-CNN + Vision Transformer",
+
+                "risk_percentage":
+                    round(
+                        risk,
+                        2
+                    ),
+
+                "risk_acres_estimated":
+                    round(
+                        acres,
+                        2
+                    ),
+
+                "high_risk_zones":
+                    high_values[index],
+
+                "moderate_zones":
+                    moderate_values[index],
+
+                "healthy_zones":
+                    healthy_values[index],
+
+                "data_type":
+                    "reconstructed_demo",
+
+                "source":
+                    "Synthetic reconstructed "
+                    "demonstration data",
+
+                "temporal_note": (
+                    "Reconstructed temporal "
+                    "demonstration generated from "
+                    "the current synthetic dataset; "
+                    "not historical satellite imagery."
+                )
+            }
+
+            reconstructed_history.append(
+                snapshot
+            )
+
+        os.makedirs(
+            os.path.dirname(
+                HISTORY_FILE
+            ),
+            exist_ok=True
+        )
+
+        with open(
+            HISTORY_FILE,
+            "w",
+            encoding="utf-8"
+        ) as file:
+
+            json.dump(
+                reconstructed_history,
+                file,
+                indent=2
+            )
+
+        progression = get_progression()
+
+        return {
+
+            "status":
+                "demo_history_created",
+
+            "count":
+                len(progression),
+
+            "history":
+                progression,
 
             "data_type":
                 "reconstructed_demo",
 
-            "temporal_note": (
-                "Reconstructed temporal "
-                "demonstration generated from "
-                "the current synthetic dataset; "
-                "not historical satellite imagery."
+            "note": (
+                "The temporal series is a "
+                "reconstructed demonstration based "
+                "on the current synthetic dataset. "
+                "It should not be presented as "
+                "historical satellite observations."
             )
         }
 
-        reconstructed_history.append(
-            snapshot
-        )
+    except Exception as error:
 
-    history_file = (
-        "dataset/history.json"
-    )
+        return {
 
-    import json
+            "status":
+                "error",
 
-    os.makedirs(
-        os.path.dirname(
-            history_file
-        ),
-        exist_ok=True
-    )
-
-    with open(
-        history_file,
-        "w",
-        encoding="utf-8"
-    ) as file:
-
-        json.dump(
-            reconstructed_history,
-            file,
-            indent=2
-        )
-
-    return {
-
-        "status":
-            "demo_history_created",
-
-        "count":
-            len(
-                reconstructed_history
-            ),
-
-        "history":
-            reconstructed_history,
-
-        "data_type":
-            "reconstructed_demo",
-
-        "note": (
-            "The temporal series is a "
-            "reconstructed demonstration based "
-            "on the current synthetic dataset. "
-            "It should not be presented as "
-            "historical satellite observations."
-        )
-    }
+            "message":
+                str(error)
+        }

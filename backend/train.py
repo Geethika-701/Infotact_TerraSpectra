@@ -1,21 +1,45 @@
 import os
-
+import random
 import numpy as np
 import torch
-
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-
 import torch.nn as nn
-import torch.optim as optim
 
-from model import TerraSpectra3DCNN
+from torch.utils.data import Dataset, DataLoader
+
+from backend.model import TerraSpectra3DCNN
 
 
-CUBE_PATH = "dataset/raw/mock_hyperspectral_cube.npy"
-LABEL_PATH = "dataset/raw/labels.npy"
 
-MODEL_DIR = "models"
+# ============================================================
+# PATHS
+# ============================================================
+
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
+PROJECT_DIR = os.path.dirname(
+    BASE_DIR
+)
+
+CUBE_PATH = os.path.join(
+    PROJECT_DIR,
+    "dataset",
+    "raw",
+    "mock_hyperspectral_cube.npy"
+)
+
+LABEL_PATH = os.path.join(
+    PROJECT_DIR,
+    "dataset",
+    "raw",
+    "labels.npy"
+)
+
+MODEL_DIR = os.path.join(
+    BASE_DIR,
+    "models"
+)
 
 MODEL_PATH = os.path.join(
     MODEL_DIR,
@@ -23,241 +47,543 @@ MODEL_PATH = os.path.join(
 )
 
 
-class HyperspectralDataset(Dataset):
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
+SEED = 42
+
+PATCH_SIZE = 7
+BANDS = 224
+
+BATCH_SIZE = 32
+
+EPOCHS = 20
+
+LEARNING_RATE = 0.001
+
+DEVICE = torch.device(
+    "cuda"
+    if torch.cuda.is_available()
+    else "cpu"
+)
+
+
+# ============================================================
+# REPRODUCIBILITY
+# ============================================================
+
+random.seed(SEED)
+
+np.random.seed(SEED)
+
+torch.manual_seed(SEED)
+
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(SEED)
+
+
+# ============================================================
+# DATASET
+# ============================================================
+
+class BalancedSpectralDataset(Dataset):
 
     def __init__(
         self,
         cube,
-        labels,
-        patch_size=7
+        labels
     ):
 
         self.cube = cube
         self.labels = labels
 
-        self.patch_size = patch_size
+        half = PATCH_SIZE // 2
 
-        margin = patch_size // 2
+        healthy_positions = []
+        stressed_positions = []
+
+        height = labels.shape[0]
+        width = labels.shape[1]
+
+        y = half
+
+        while y < height - half:
+
+            x = half
+
+            while x < width - half:
+
+                label = int(
+                    labels[y, x]
+                )
+
+                if label == 0:
+
+                    healthy_positions.append(
+                        (y, x)
+                    )
+
+                else:
+
+                    stressed_positions.append(
+                        (y, x)
+                    )
+
+                x += 1
+
+            y += 1
+
+        print(
+            "Original healthy centers:",
+            len(healthy_positions)
+        )
+
+        print(
+            "Original stressed centers:",
+            len(stressed_positions)
+        )
+
+        # ----------------------------------------------------
+        # Balance the classes
+        # ----------------------------------------------------
+
+        random_generator = np.random.default_rng(
+            SEED
+        )
+
+        number_per_class = min(
+            len(healthy_positions),
+            len(stressed_positions)
+        )
+
+        healthy_indices = random_generator.choice(
+            len(healthy_positions),
+            size=number_per_class,
+            replace=False
+        )
+
+        stressed_indices = random_generator.choice(
+            len(stressed_positions),
+            size=number_per_class,
+            replace=False
+        )
 
         self.samples = []
 
-        height, width, _ = cube.shape
+        for index in healthy_indices:
 
-        for row in range(
-            margin,
-            height - margin
-        ):
+            y_coord, x_coord = healthy_positions[
+                index
+            ]
 
-            for col in range(
-                margin,
-                width - margin
-            ):
-
-                label = labels[row, col]
-
-                self.samples.append(
-                    (row, col, label)
+            self.samples.append(
+                (
+                    y_coord,
+                    x_coord,
+                    0
                 )
+            )
 
-    def __len__(self):
+        for index in stressed_indices:
 
-        return len(self.samples)
+            y_coord, x_coord = stressed_positions[
+                index
+            ]
 
-    def __getitem__(self, index):
+            self.samples.append(
+                (
+                    y_coord,
+                    x_coord,
+                    1
+                )
+            )
 
-        row, col, label = self.samples[index]
+        # Shuffle the balanced samples
 
-        margin = self.patch_size // 2
+        random_generator.shuffle(
+            self.samples
+        )
+
+        print(
+            "Balanced training samples:",
+            len(self.samples)
+        )
+
+        print(
+            "Healthy training samples:",
+            number_per_class
+        )
+
+        print(
+            "Stressed training samples:",
+            number_per_class
+        )
+
+    def __len__(
+        self
+    ):
+
+        return len(
+            self.samples
+        )
+
+    def __getitem__(
+        self,
+        index
+    ):
+
+        y_coord, x_coord, label = self.samples[
+            index
+        ]
+
+        half = PATCH_SIZE // 2
 
         patch = self.cube[
-            row - margin:
-            row + margin + 1,
-
-            col - margin:
-            col + margin + 1,
-
+            y_coord - half:
+            y_coord + half + 1,
+            x_coord - half:
+            x_coord + half + 1,
             :
         ]
 
-        # H, W, Bands
-        # →
-        # Bands, H, W
-        patch = np.transpose(
-            patch,
-            (2, 0, 1)
+        patch = patch.astype(
+            np.float32
         )
 
-        patch = torch.tensor(
-            patch,
-            dtype=torch.float32
+        # ----------------------------------------------------
+        # Per-patch spectral normalization
+        # ----------------------------------------------------
+
+        patch_min = patch.min()
+        patch_max = patch.max()
+
+        if patch_max - patch_min > 1e-8:
+
+            patch = (
+                patch - patch_min
+            ) / (
+                patch_max - patch_min
+            )
+
+        else:
+
+            patch = np.zeros_like(
+                patch,
+                dtype=np.float32
+            )
+
+        tensor = torch.from_numpy(
+            patch
         )
 
-        # Add channel dimension
-        patch = patch.unsqueeze(0)
+        # [7, 7, 224]
+        #
+        # CNN expects:
+        # [1, 7, 7, 224]
 
-        label = torch.tensor(
+        tensor = tensor.unsqueeze(
+            0
+        )
+
+        label_tensor = torch.tensor(
             label,
             dtype=torch.long
         )
 
-        return patch, label
-
-
-def main():
-
-    os.makedirs(
-        MODEL_DIR,
-        exist_ok=True
-    )
-
-    print("Loading dataset...")
-
-    cube = np.load(
-        CUBE_PATH
-    )
-
-    labels = np.load(
-        LABEL_PATH
-    )
-
-    print(
-        "Cube:",
-        cube.shape
-    )
-
-    print(
-        "Labels:",
-        labels.shape
-    )
-
-    # Normalize values
-    cube = cube.astype(
-        np.float32
-    )
-
-    mean = cube.mean()
-
-    std = cube.std()
-
-    cube = (
-        cube - mean
-    ) / (
-        std + 1e-8
-    )
-
-    dataset = HyperspectralDataset(
-        cube,
-        labels
-    )
-
-    print(
-        "Training samples:",
-        len(dataset)
-    )
-
-    loader = DataLoader(
-        dataset,
-        batch_size=16,
-        shuffle=True
-    )
-
-    device = torch.device(
-        "cuda"
-        if torch.cuda.is_available()
-        else "cpu"
-    )
-
-    print(
-        "Training device:",
-        device
-    )
-
-    model = TerraSpectra3DCNN()
-
-    model = model.to(device)
-
-    criterion = nn.CrossEntropyLoss()
-
-    optimizer = optim.Adam(
-        model.parameters(),
-        lr=0.001
-    )
-
-    epochs = 5
-
-    for epoch in range(
-        epochs
-    ):
-
-        model.train()
-
-        total_loss = 0
-
-        correct = 0
-
-        total = 0
-
-        for patches, targets in loader:
-
-            patches = patches.to(
-                device
-            )
-
-            targets = targets.to(
-                device
-            )
-
-            optimizer.zero_grad()
-
-            outputs = model(
-                patches
-            )
-
-            loss = criterion(
-                outputs,
-                targets
-            )
-
-            loss.backward()
-
-            optimizer.step()
-
-            total_loss += loss.item()
-
-            predictions = torch.argmax(
-                outputs,
-                dim=1
-            )
-
-            correct += (
-                predictions == targets
-            ).sum().item()
-
-            total += targets.size(0)
-
-        accuracy = (
-            correct / total
-        ) * 100
-
-        print(
-            f"Epoch {epoch + 1}/{epochs} "
-            f"Loss: {total_loss:.4f} "
-            f"Accuracy: {accuracy:.2f}%"
+        return (
+            tensor,
+            label_tensor
         )
 
-    torch.save(
-        model.state_dict(),
-        MODEL_PATH
+
+# ============================================================
+# LOAD DATA
+# ============================================================
+
+print("")
+print("========================================")
+print("TerraSpectra 3D-CNN Training")
+print("========================================")
+print("")
+
+print(
+    "Device:",
+    DEVICE
+)
+
+print(
+    "Cube:",
+    CUBE_PATH
+)
+
+print(
+    "Labels:",
+    LABEL_PATH
+)
+
+cube = np.load(
+    CUBE_PATH
+).astype(
+    np.float32
+)
+
+labels = np.load(
+    LABEL_PATH
+)
+
+print(
+    "Cube shape:",
+    cube.shape
+)
+
+print(
+    "Labels shape:",
+    labels.shape
+)
+
+print(
+    "Spectral bands:",
+    cube.shape[2]
+)
+
+print(
+    "Healthy pixels:",
+    int(
+        np.sum(labels == 0)
+    )
+)
+
+print(
+    "Stressed pixels:",
+    int(
+        np.sum(labels == 1)
+    )
+)
+
+
+# ============================================================
+# DATASET
+# ============================================================
+
+dataset = BalancedSpectralDataset(
+    cube,
+    labels
+)
+
+loader = DataLoader(
+    dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=True,
+    num_workers=0
+)
+
+
+# ============================================================
+# MODEL
+# ============================================================
+
+model = TerraSpectra3DCNN()
+
+model = model.to(
+    DEVICE
+)
+
+
+# ============================================================
+# LOSS
+# ============================================================
+
+criterion = nn.CrossEntropyLoss()
+
+
+# ============================================================
+# OPTIMIZER
+# ============================================================
+
+optimizer = torch.optim.Adam(
+    model.parameters(),
+    lr=LEARNING_RATE,
+    weight_decay=0.0001
+)
+
+
+# ============================================================
+# TRAINING
+# ============================================================
+
+for epoch in range(
+    EPOCHS
+):
+
+    model.train()
+
+    total_loss = 0.0
+
+    correct = 0
+
+    total = 0
+
+    predicted_healthy = 0
+
+    predicted_stressed = 0
+
+    actual_healthy = 0
+
+    actual_stressed = 0
+
+    batch_number = 0
+
+    for inputs, targets in loader:
+
+        inputs = inputs.to(
+            DEVICE
+        )
+
+        targets = targets.to(
+            DEVICE
+        )
+
+        optimizer.zero_grad()
+
+        outputs = model(
+            inputs
+        )
+
+        loss = criterion(
+            outputs,
+            targets
+        )
+
+        loss.backward()
+
+        optimizer.step()
+
+        total_loss += (
+            loss.item()
+        )
+
+        predictions = torch.argmax(
+            outputs,
+            dim=1
+        )
+
+        correct += int(
+            (
+                predictions == targets
+            ).sum().item()
+        )
+
+        total += targets.size(
+            0
+        )
+
+        predicted_healthy += int(
+            (
+                predictions == 0
+            ).sum().item()
+        )
+
+        predicted_stressed += int(
+            (
+                predictions == 1
+            ).sum().item()
+        )
+
+        actual_healthy += int(
+            (
+                targets == 0
+            ).sum().item()
+        )
+
+        actual_stressed += int(
+            (
+                targets == 1
+            ).sum().item()
+        )
+
+        batch_number += 1
+
+    epoch_loss = (
+        total_loss /
+        batch_number
+    )
+
+    epoch_accuracy = (
+        correct /
+        total
+        *
+        100.0
+    )
+
+    print("")
+    print(
+        "Epoch "
+        + str(epoch + 1)
+        + "/"
+        + str(EPOCHS)
     )
 
     print(
-        "\n3D-CNN model saved:"
+        "Loss:",
+        round(
+            epoch_loss,
+            6
+        )
     )
 
     print(
-        MODEL_PATH
+        "Accuracy:",
+        round(
+            epoch_accuracy,
+            2
+        ),
+        "%"
+    )
+
+    print(
+        "Predicted Healthy:",
+        predicted_healthy
+    )
+
+    print(
+        "Predicted Stressed:",
+        predicted_stressed
+    )
+
+    print(
+        "Actual Healthy:",
+        actual_healthy
+    )
+
+    print(
+        "Actual Stressed:",
+        actual_stressed
     )
 
 
-if __name__ == "__main__":
-    main()
+# ============================================================
+# SAVE MODEL
+# ============================================================
+
+os.makedirs(
+    MODEL_DIR,
+    exist_ok=True
+)
+
+torch.save(
+    model.state_dict(),
+    MODEL_PATH
+)
+
+print("")
+print("========================================")
+print("3D-CNN training completed")
+print("========================================")
+
+print(
+    "Model saved to:",
+    MODEL_PATH
+)
+
+print("")
