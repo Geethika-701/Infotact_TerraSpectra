@@ -17,7 +17,220 @@ const API_URL =
   import.meta.env.VITE_API_URL ||
   "http://127.0.0.1:5000";
 
+/*
+  Synthetic TerraSpectra farm reference.
+
+  These coordinates match the coordinate system
+  already used by the dashboard.
+
+  IMPORTANT:
+  longitude = X
+  latitude  = Y
+*/
+
+const FARM_CENTER_LNG = 83.2185;
+const FARM_CENTER_LAT = 17.6868;
+
+/*
+  841 prediction zones = 29 x 29 grid.
+
+  Each prediction cell is displayed as a small
+  geographic polygon around the farm center.
+*/
+
+const GRID_SIZE = 29;
+
+/*
+  Geographic size of one displayed prediction cell.
+
+  This is intentionally small so the prediction
+  grid stays around the farm area.
+*/
+
+const CELL_SIZE = 0.00022;
+
+/*
+  Convert backend predictions into Deck.gl polygons.
+*/
+function prepareMapPredictions(rawPredictions) {
+
+  if (
+    !Array.isArray(rawPredictions) ||
+    rawPredictions.length === 0
+  ) {
+    return [];
+  }
+
+  const prepared = [];
+
+  for (
+    let index = 0;
+    index < rawPredictions.length;
+    index++
+  ) {
+
+    const item =
+      rawPredictions[index] || {};
+
+    /*
+      Try to use row/column information if the
+      backend already provides it.
+    */
+
+    let row;
+
+    let col;
+
+    if (
+      item.row !== undefined &&
+      item.row !== null
+    ) {
+      row = Number(item.row);
+    } else if (
+      item.y !== undefined &&
+      item.y !== null
+    ) {
+      row = Number(item.y);
+    } else {
+      row =
+        Math.floor(
+          index / GRID_SIZE
+        );
+    }
+
+    if (
+      item.col !== undefined &&
+      item.col !== null
+    ) {
+      col = Number(item.col);
+    } else if (
+      item.x !== undefined &&
+      item.x !== null
+    ) {
+      col = Number(item.x);
+    } else {
+      col =
+        index % GRID_SIZE;
+    }
+
+    /*
+      Keep row/column inside the expected
+      29 x 29 grid.
+    */
+
+    if (
+      !Number.isFinite(row)
+    ) {
+      row =
+        Math.floor(
+          index / GRID_SIZE
+        );
+    }
+
+    if (
+      !Number.isFinite(col)
+    ) {
+      col =
+        index % GRID_SIZE;
+    }
+
+    /*
+      Risk can come from several backend field
+      names depending on the prediction response.
+    */
+
+    let risk = Number(
+      item.risk ??
+      item.probability ??
+      item.fused_risk ??
+      item.fused_probability ??
+      item.stressed_probability ??
+      0
+    );
+
+    if (!Number.isFinite(risk)) {
+      risk = 0;
+    }
+
+    /*
+      If the backend ever returns a percentage
+      such as 75 instead of 0.75, normalize it.
+    */
+
+    if (risk > 1) {
+      risk = risk / 100;
+    }
+
+    /*
+      Calculate the geographic position.
+
+      Center the 29 x 29 grid around the farm center.
+    */
+
+    const gridOffset =
+      (GRID_SIZE - 1) / 2;
+
+    const centerLng =
+      FARM_CENTER_LNG +
+      (col - gridOffset) *
+      CELL_SIZE;
+
+    const centerLat =
+      FARM_CENTER_LAT +
+      (gridOffset - row) *
+      CELL_SIZE;
+
+    /*
+      Half cell size.
+    */
+
+    const half =
+      CELL_SIZE / 2;
+
+    /*
+      Deck.gl polygon coordinate order:
+
+      [longitude, latitude]
+    */
+
+    const polygon = [
+      [
+        centerLng - half,
+        centerLat - half
+      ],
+      [
+        centerLng + half,
+        centerLat - half
+      ],
+      [
+        centerLng + half,
+        centerLat + half
+      ],
+      [
+        centerLng - half,
+        centerLat + half
+      ]
+    ];
+
+    prepared.push({
+      ...item,
+
+      row,
+      col,
+
+      risk,
+
+      probability: risk,
+
+      polygon
+    });
+  }
+
+  return prepared;
+}
+
 export default function App() {
+
   const [predictions, setPredictions] =
     useState([]);
 
@@ -31,16 +244,25 @@ export default function App() {
     useState(false);
 
   useEffect(() => {
+
     async function loadDashboardData() {
+
       try {
+
         setLoading(true);
+
+        /*
+          Load fused CNN + ViT predictions.
+        */
 
         const predictionsResponse =
           await fetch(
             `${API_URL}/predictions/fused`
           );
 
-        if (!predictionsResponse.ok) {
+        if (
+          !predictionsResponse.ok
+        ) {
           throw new Error(
             "Fused prediction API failed"
           );
@@ -49,44 +271,109 @@ export default function App() {
         const predictionsData =
           await predictionsResponse.json();
 
+        /*
+          Get raw backend predictions.
+        */
+
+        const rawPredictions =
+          predictionsData.predictions || [];
+
+        /*
+          IMPORTANT:
+
+          Convert backend prediction records
+          into map-ready records containing
+          polygon coordinates.
+        */
+
+        const mapPredictions =
+          prepareMapPredictions(
+            rawPredictions
+          );
+
+        console.log(
+          "TerraSpectra raw predictions:",
+          rawPredictions
+        );
+
+        console.log(
+          "TerraSpectra map predictions:",
+          mapPredictions
+        );
+
+        if (
+          mapPredictions.length > 0
+        ) {
+
+          console.log(
+            "First map polygon:",
+            mapPredictions[0].polygon
+          );
+
+          console.log(
+            "First map risk:",
+            mapPredictions[0].risk
+          );
+        }
+
         setPredictions(
-          predictionsData.predictions || []
+          mapPredictions
         );
 
         setApiOnline(true);
 
+        /*
+          Load analytics separately.
+        */
+
         try {
+
           const analyticsResponse =
             await fetch(
               `${API_URL}/analytics`
             );
 
-          if (analyticsResponse.ok) {
+          if (
+            analyticsResponse.ok
+          ) {
+
             const data =
               await analyticsResponse.json();
 
-            setAnalyticsData(data);
+            setAnalyticsData(
+              data
+            );
           }
-        } catch (analyticsError) {
+
+        } catch (
+          analyticsError
+        ) {
+
           console.error(
             "Analytics API error:",
             analyticsError
           );
         }
+
       } catch (error) {
+
         console.error(
           "Backend connection error:",
           error
         );
 
         setApiOnline(false);
+
         setPredictions([]);
+
       } finally {
+
         setLoading(false);
       }
     }
 
     loadDashboardData();
+
   }, []);
 
   const highRisk =
@@ -127,6 +414,7 @@ export default function App() {
     );
 
   return (
+
     <div className="app">
 
       <Sidebar />
