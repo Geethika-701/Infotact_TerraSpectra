@@ -581,7 +581,7 @@ def classify_risk(
 
         return "High Risk"
 
-    if probability >= 0.40:
+    elif probability >= 0.30:
 
         return "Moderate Risk"
 
